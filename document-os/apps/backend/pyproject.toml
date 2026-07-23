@@ -1,0 +1,39 @@
+[project]
+name = "documentos-backend"
+version = "0.1.0"
+description = "AI Document Operating System - backend (FastAPI + Gemma agents)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "email-validator>=2.0",
+    "PyJWT>=2.8",
+    "passlib>=1.7.4",
+    "httpx>=0.27",
+    "python-multipart>=0.0.9",
+    "markdown>=3.6",
+    "python-docx>=1.1",
+    "reportlab>=4.2",
+    "alembic>=1.13",
+    "psycopg2-binary>=2.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

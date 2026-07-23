@@ -1,0 +1,12 @@
+{
+  "name": "@documentos/backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "uv run uvicorn app.main:app --reload --port 8000",
+    "start": "uv run uvicorn app.main:app --port 8000",
+    "seed": "uv run python -m app.seed",
+    "test": "uv run pytest",
+    "typecheck": "echo 'backend: pytest covers checks'"
+  }
+}

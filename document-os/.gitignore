@@ -1,0 +1,27 @@
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# App data
+*.db
+*.db-journal
+apps/backend/exports/
+apps/backend/.env
+
+# Env / editors
+.env
+.env.local
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
