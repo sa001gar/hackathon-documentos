@@ -1,8 +1,8 @@
 import type { DocumentDetail, SectionNode } from "@documentos/shared-types";
 import { cn } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, GripVertical, History, Plus, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronDown, GripVertical, History, Plus, Sparkles, Trash2, WandSparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SectionStatusChip } from "@/components/status";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,12 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSectionStream } from "@/hooks/use-sse-stream";
 import { ApiClientError, sectionApi } from "@/lib/api-client";
+import { countWords } from "@/lib/markdown";
 import { useEditorStore } from "./editor-store";
+import { useGenerationStore } from "./generation-store";
 import { SectionEditor } from "./section-editor";
 import { StreamOverlay } from "./stream-overlay";
+import { QueuedBody, StreamingBody } from "./streaming-body";
 
 interface SectionCardProps {
   node: SectionNode;
@@ -38,9 +41,9 @@ function patchSection(
   qc.setQueryData<DocumentDetail>(["document", documentId], (old) =>
     old
       ? {
-          ...old,
-          sections: old.sections.map((s) => (s.id === sectionId ? { ...s, ...patch } : s)),
-        }
+        ...old,
+        sections: old.sections.map((s) => (s.id === sectionId ? { ...s, ...patch } : s)),
+      }
       : old,
   );
 }
@@ -97,6 +100,25 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const stream = useSectionStream();
 
+  // Live pipeline state for this section (stable refs → only this card
+  // re-renders when its own status/tokens change).
+  const genSection = useGenerationStore((s) => s.sections.find((x) => x.id === node.id));
+  const genActive = useGenerationStore((s) => s.phase === "generating" || s.phase === "planning");
+  const pipelineStreaming = genSection?.status === "generating";
+  const queued = genActive && genSection?.status === "queued";
+  const pipelineFailed = genSection?.status === "failed";
+
+  // Auto-expand when the pipeline starts writing this section.
+  useEffect(() => {
+    if (pipelineStreaming) setCollapsed(false);
+  }, [pipelineStreaming]);
+
+  // Live word count while the pipeline streams this section.
+  const liveWords = useMemo(
+    () => (pipelineStreaming && genSection ? countWords(genSection.tokens) : null),
+    [pipelineStreaming, genSection],
+  );
+
   const beginStream = () => {
     stream.start(node.id, undefined, {
       onDone: (section) => {
@@ -139,9 +161,9 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
       toast.error(err instanceof ApiClientError ? err.message : "Failed to delete section"),
   });
 
-  const actions: { icon: typeof Sparkles; label: string; onClick: () => void; disabled?: boolean }[] = [
+  const actions: { icon: typeof WandSparkles; label: string; onClick: () => void; disabled?: boolean }[] = [
     {
-      icon: Sparkles,
+      icon: WandSparkles,
       label: "Generate with AI",
       onClick: () => {
         if (node.content.trim()) setConfirmOverwrite(true);
@@ -158,9 +180,10 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
     <div id={`section-${node.id}`} className="scroll-mt-20">
       <div
         className={cn(
-          "group rounded-lg border border-border bg-card transition-colors",
-          node.status === "error" && "border-destructive/40",
-          stream.streaming && "border-primary/40",
+          "group rounded-xl border border-border/80 bg-card shadow-sm transition-all duration-200 hover:border-border hover:shadow-md",
+          (node.status === "error" || pipelineFailed) && "border-destructive/40",
+          (stream.streaming || pipelineStreaming) && "border-primary/40 shadow-md ring-1 ring-primary/10",
+          queued && "opacity-80",
         )}
       >
         <div className="flex items-center gap-1 px-2 pt-1.5">
@@ -178,10 +201,30 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
             />
           </button>
           <SectionTitle node={node} documentId={documentId} />
-          <span className="hidden shrink-0 text-[11px] text-muted-foreground/70 sm:inline">
-            {node.word_count.toLocaleString()} words
+          <span
+            className={cn(
+              "hidden shrink-0 text-[11px] tabular-nums text-muted-foreground/70 sm:inline",
+              liveWords !== null && "font-medium text-primary",
+            )}
+          >
+            {(liveWords ?? node.word_count).toLocaleString()} words
           </span>
-          <SectionStatusChip status={stream.streaming ? "generating" : node.status} />
+          {queued ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+              queued
+            </span>
+          ) : (
+            <SectionStatusChip
+              status={
+                stream.streaming || pipelineStreaming
+                  ? "generating"
+                  : pipelineFailed
+                    ? "error"
+                    : node.status
+              }
+            />
+          )}
           <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
             {actions.map(({ icon: Icon, label, onClick, disabled }) => (
               <Tooltip key={label}>
@@ -203,7 +246,13 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
         </div>
         {!collapsed && (
           <div className="relative px-3 pb-2 pt-1">
-            <SectionEditor section={node} documentId={documentId} autosaveInterval={autosaveInterval} />
+            {pipelineStreaming ? (
+              <StreamingBody tokens={genSection?.tokens ?? ""} />
+            ) : queued ? (
+              <QueuedBody />
+            ) : (
+              <SectionEditor section={node} documentId={documentId} autosaveInterval={autosaveInterval} />
+            )}
             {stream.streaming && <StreamOverlay tokens={stream.tokens} onStop={stream.abort} />}
           </div>
         )}
@@ -244,7 +293,7 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
                 beginStream();
               }}
             >
-              <Sparkles className="h-4 w-4" />
+              <WandSparkles className="h-4 w-4" />
               Generate
             </Button>
           </DialogFooter>

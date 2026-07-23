@@ -1,6 +1,7 @@
 import { Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { StreamedMarkdown } from "./streaming-body";
 
 /** Live token preview shown over a section body while SSE generation runs. */
 export function StreamOverlay({ tokens, onStop }: { tokens: string; onStop: () => void }) {
@@ -17,9 +18,9 @@ export function StreamOverlay({ tokens, onStop }: { tokens: string; onStop: () =
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <p className="whitespace-pre-wrap px-3 py-2 text-[13px] leading-relaxed text-muted-foreground">
-          {tokens || "Waiting for the first tokens…"}
-        </p>
+        <div className="px-3 py-2">
+          <StreamedMarkdown tokens={tokens} />
+        </div>
       </ScrollArea>
     </div>
   );

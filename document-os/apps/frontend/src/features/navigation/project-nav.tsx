@@ -41,7 +41,7 @@ function ProjectItem({ project }: { project: Project }) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <div className="group flex items-center gap-1 rounded-md pr-1 hover:bg-accent">
+      <div className="group flex min-w-0 w-full items-center gap-1 rounded-md pr-1 hover:bg-accent">
         <CollapsibleTrigger asChild>
           <button className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left text-[13px] focus-visible:outline-none">
             <ChevronRight
@@ -60,7 +60,7 @@ function ProjectItem({ project }: { project: Project }) {
         <Button
           size="icon-sm"
           variant="ghost"
-          className="h-5 w-5 opacity-0 group-hover:opacity-100"
+          className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100"
           aria-label={`New document in ${project.name}`}
           onClick={() => {
             setOpen(true);
@@ -70,10 +70,10 @@ function ProjectItem({ project }: { project: Project }) {
           <Plus className="h-3 w-3" />
         </Button>
       </div>
-      <CollapsibleContent>
-        <div className="ml-[22px] border-l border-border/60 pl-2">
+      <CollapsibleContent className="min-w-0 w-full">
+        <div className="ml-[18px] min-w-0 border-l border-border/60 pl-1.5">
           {creatingDoc && (
-            <div className="flex items-center gap-1 py-0.5 pr-1">
+            <div className="flex min-w-0 items-center gap-1 py-0.5 pr-1">
               <Input
                 autoFocus
                 value={docTitle}
@@ -118,11 +118,11 @@ function DocumentRow({ doc, active }: { doc: DocumentSummary; active: boolean })
     <button
       onClick={() => navigate(`/doc/${doc.id}`)}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        "flex min-w-0 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        active ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
-      <StatusDot status={doc.status} map={DOCUMENT_DOT_COLORS} className="h-1.5 w-1.5" />
+      <StatusDot status={doc.status} map={DOCUMENT_DOT_COLORS} className="h-1.5 w-1.5 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{doc.title}</span>
     </button>
   );
@@ -146,7 +146,7 @@ export function ProjectsNav({ workspaceId }: { workspaceId: string }) {
   });
 
   return (
-    <div className="px-2">
+    <div className="min-w-0 px-2">
       <div className="flex items-center justify-between px-2 pb-1 pt-3">
         <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           Projects
@@ -154,7 +154,7 @@ export function ProjectsNav({ workspaceId }: { workspaceId: string }) {
         <Button
           size="icon-sm"
           variant="ghost"
-          className="h-5 w-5"
+          className="h-5 w-5 shrink-0"
           aria-label="New project"
           onClick={() => setCreating((v) => !v)}
         >
@@ -162,7 +162,7 @@ export function ProjectsNav({ workspaceId }: { workspaceId: string }) {
         </Button>
       </div>
       {creating && (
-        <div className="flex items-center gap-1.5 px-2 py-1">
+        <div className="flex min-w-0 items-center gap-1.5 px-2 py-1">
           <FolderPlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <Input
             autoFocus
@@ -195,7 +195,7 @@ export function ProjectsNav({ workspaceId }: { workspaceId: string }) {
           No projects yet — create one to start.
         </p>
       )}
-      <div className="space-y-0.5">
+      <div className="min-w-0 space-y-0.5">
         {(projects ?? []).map((project) => (
           <ProjectItem key={project.id} project={project} />
         ))}
@@ -211,7 +211,7 @@ export function RecentNav({ workspaceId }: { workspaceId: string }) {
   const recent = documents.slice(0, 5);
 
   return (
-    <div className="px-2">
+    <div className="min-w-0 px-2">
       <div className="px-2 pb-1 pt-3">
         <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           Recent
@@ -226,19 +226,19 @@ export function RecentNav({ workspaceId }: { workspaceId: string }) {
       {!isLoading && recent.length === 0 && (
         <p className="px-2 py-1 text-[11px] text-muted-foreground">Nothing opened yet.</p>
       )}
-      <div className="space-y-0.5">
+      <div className="min-w-0 space-y-0.5">
         {recent.map((doc) => (
           <button
             key={doc.id}
             onClick={() => navigate(`/doc/${doc.id}`)}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              "flex min-w-0 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               location.pathname === `/doc/${doc.id}`
-                ? "bg-accent text-foreground"
+                ? "bg-accent font-medium text-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >
-            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate">{doc.title}</span>
             <span className="shrink-0 text-[10px] text-muted-foreground/70">
               {formatRelativeTime(doc.updated_at)}

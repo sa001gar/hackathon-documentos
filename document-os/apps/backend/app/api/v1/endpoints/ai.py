@@ -2,6 +2,7 @@
 
 Endpoints never call providers directly (see app/ai).
 """
+import asyncio
 import json
 
 from fastapi import APIRouter, Depends, status
@@ -15,7 +16,7 @@ from app.api.deps import (
     get_section_for_user,
 )
 from app.db.session import get_db
-from app.models import User
+from app.models import User, DocumentSection
 from app.schemas.ai import (
     GenerateDocumentRequest,
     GenerationJobRead,
@@ -48,6 +49,181 @@ async def generate_document(
     return job_runner.start_document_generation(
         document_id, data.prompt, data.use_existing_structure
     )
+
+
+@router.post(
+    "/documents/{document_id}/generate/stream",
+)
+async def stream_generate_document(
+    document_id: str,
+    data: GenerateDocumentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """SSE stream: plan → write each section, pushing rich real-time events.
+
+    All DB work uses a dedicated `stream_db` session (not the request session
+    `db`) — the request session may be closed by the time the generator yields.
+
+    Resumable: sections already completed (status not pending/error) are
+    skipped, so a client can reconnect after a disconnect and continue.
+    Cancellable: on client disconnect the in-flight section resets to pending.
+    """
+    from app.ai.engine import get_ai_engine
+    from app.db.session import SessionLocal
+    from app.repositories import document_repo, section_repo
+    from app.schemas.section import SectionRead
+    from app.services import document_service
+
+    get_document_for_user(db, document_id, current_user)
+
+    def sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj)}\n\n"
+
+    async def event_stream():
+        stream_db = SessionLocal()
+        current_section_id: str | None = None
+        try:
+            engine = get_ai_engine()
+            doc = document_repo.get(stream_db, document_id)
+
+            yield sse({"type": "generation_started", "document_id": document_id})
+
+            # 1. Plan — build outline unless we keep the existing structure
+            sections = document_service.get_sections(stream_db, document_id)
+            has_structure = any(s.title for s in sections)
+            if not has_structure or not data.use_existing_structure:
+                yield sse({"type": "planning_started"})
+                plan = await engine.plan(
+                    stream_db, prompt=data.prompt or "Write a professional document.",
+                    existing_structure=None, document_id=document_id,
+                )
+                for s in section_repo.list_for_document(stream_db, document_id):
+                    if s.parent_id is None:
+                        section_repo.delete_subtree(stream_db, s)
+                _create_sections(stream_db, document_id, plan.sections, None)
+
+            if doc:
+                doc.status = "generating"
+                stream_db.add(doc)
+                stream_db.commit()
+
+            sections = document_service.get_sections(stream_db, document_id)
+            todo = [s for s in sections if s.status in ("pending", "error")]
+            total = len(todo)
+
+            # Full outline with statuses — lets the client render placeholders
+            # immediately and mark already-completed sections on reconnect.
+            yield sse({
+                "type": "outline_created",
+                "title": doc.title if doc else "",
+                "total": total,
+                "sections": [
+                    {
+                        "id": s.id,
+                        "title": s.title,
+                        "status": "completed" if s.status in ("draft", "reviewed", "validated") else "queued",
+                    }
+                    for s in sections
+                ],
+            })
+
+            # 2. Generate each section
+            succeeded = 0
+            failed = 0
+            for index, section in enumerate(todo):
+                current_section_id = section.id
+                yield sse({
+                    "type": "section_started",
+                    "section_id": section.id,
+                    "title": section.title,
+                    "index": index,
+                    "total": total,
+                })
+                try:
+                    async for token in engine.stream_section(stream_db, section_id=section.id):
+                        yield sse({"type": "token", "section_id": section.id, "value": token})
+                    s = section_repo.get(stream_db, section.id)
+                    payload = SectionRead.model_validate(s).model_dump(mode="json")
+                    yield sse({"type": "section_completed", "section": payload})
+                    succeeded += 1
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    failed += 1
+                    s = section_repo.get(stream_db, section.id)
+                    if s is not None and s.status == "generating":
+                        s.status = "error"
+                        stream_db.add(s)
+                        stream_db.commit()
+                    yield sse({
+                        "type": "section_failed",
+                        "section_id": section.id,
+                        "title": section.title,
+                        "message": str(exc)[:500],
+                    })
+                finally:
+                    current_section_id = None
+
+            # 3. Finalize
+            if doc:
+                doc.status = "generated" if succeeded > 0 else "draft"
+                stream_db.add(doc)
+                stream_db.commit()
+
+            yield sse({
+                "type": "generation_completed",
+                "document_id": document_id,
+                "total": total,
+                "succeeded": succeeded,
+                "failed": failed,
+            })
+        except asyncio.CancelledError:
+            # Client disconnected: reset in-flight work so a later resume picks up cleanly.
+            try:
+                if current_section_id:
+                    s = section_repo.get(stream_db, current_section_id)
+                    if s is not None and s.status == "generating":
+                        s.status = "pending"
+                        stream_db.add(s)
+                d = document_repo.get(stream_db, document_id)
+                if d is not None and d.status == "generating":
+                    d.status = "draft"
+                    stream_db.add(d)
+                stream_db.commit()
+            except Exception:
+                pass
+            raise
+        except Exception as exc:
+            yield sse({"type": "error", "message": str(exc)[:500]})
+        finally:
+            stream_db.close()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+def _create_sections(
+    stream_db: Session, document_id: str, nodes, parent_id: str | None
+) -> None:
+    """Recursively create section rows from planner output nodes."""
+    for i, node in enumerate(nodes):
+        sec = DocumentSection(
+            document_id=document_id,
+            parent_id=parent_id,
+            title=node.title,
+            ai_prompt=node.prompt or "",
+            order_index=i,
+            status="pending",
+        )
+        stream_db.add(sec)
+        stream_db.commit()
+        stream_db.refresh(sec)
+        _create_sections(stream_db, document_id, node.children, sec.id)
+
 
 
 @router.get("/generation-jobs/{job_id}", response_model=GenerationJobRead)

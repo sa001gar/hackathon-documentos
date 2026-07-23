@@ -2,7 +2,7 @@ import type { DocumentSummary, Project } from "@documentos/shared-types";
 import { formatRelativeTime } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { FileText, FolderPlus, Layers, Plus, Sparkles } from "lucide-react";
+import { FileText, FolderPlus, Layers, Plus, WandSparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -251,7 +251,7 @@ export function DashboardPage() {
                 <h2 className="text-sm font-medium">Recent documents</h2>
                 {documents.length > 0 && (
                   <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => navigate("/templates")}>
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <WandSparkles className="h-3.5 w-3.5" />
                     Start from a template
                   </Button>
                 )}

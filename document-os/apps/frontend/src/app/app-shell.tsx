@@ -63,9 +63,10 @@ export function AppShell() {
             order={1}
             collapsible
             collapsedSize={0}
-            minSize={14}
-            maxSize={28}
-            defaultSize={leftCollapsed ? 0 : leftSize}
+            minSize={16}
+            maxSize={32}
+            defaultSize={leftCollapsed ? 0 : Math.max(leftSize, 18)}
+            className="overflow-hidden"
             onCollapse={() => setLeftCollapsed(true)}
             onExpand={() => setLeftCollapsed(false)}
             onResize={(size) => {

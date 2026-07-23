@@ -236,6 +236,25 @@ export interface Export {
 }
 
 // ---------- SSE streaming ----------
+
+/** Full-document generation pipeline events (POST /documents/{id}/generate/stream). */
+export type DocGenEvent =
+  | { type: "generation_started"; document_id: string }
+  | { type: "planning_started" }
+  | {
+      type: "outline_created";
+      title: string;
+      total: number;
+      sections: { id: string; title: string; status: "queued" | "completed" }[];
+    }
+  | { type: "section_started"; section_id: string; title: string; index: number; total: number }
+  | { type: "token"; section_id: string; value: string }
+  | { type: "section_completed"; section: Section }
+  | { type: "section_failed"; section_id: string; title: string; message: string }
+  | { type: "generation_completed"; document_id: string; total: number; succeeded: number; failed: number }
+  | { type: "error"; message: string };
+
+/** Single-section generation events (POST /sections/{id}/generate/stream). */
 export type StreamEvent =
   | { type: "token"; value: string }
   | { type: "done"; section: Section }

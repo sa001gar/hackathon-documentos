@@ -31,7 +31,7 @@ export const useUiStore = create<UiState>()(
       rightCollapsed: false,
       setLeftCollapsed: (leftCollapsed) => set({ leftCollapsed }),
       setRightCollapsed: (rightCollapsed) => set({ rightCollapsed }),
-      leftSize: 17,
+      leftSize: 20,
       rightSize: 22,
       setLeftSize: (leftSize) => set({ leftSize }),
       setRightSize: (rightSize) => set({ rightSize }),

@@ -15,8 +15,8 @@ import {
   Play,
   Scale,
   Scissors,
-  Sparkles,
   Wand2,
+  WandSparkles,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -28,12 +28,12 @@ import { ApiClientError, aiApi } from "@/lib/api-client";
 interface ToolbarAction {
   action: RefineAction;
   label: string;
-  icon: typeof Sparkles;
+  icon: typeof WandSparkles;
 }
 
 const ACTION_GROUPS: ToolbarAction[][] = [
   [
-    { action: "improve", label: "Improve", icon: Sparkles },
+    { action: "improve", label: "Improve", icon: WandSparkles },
     { action: "rewrite", label: "Rewrite", icon: PenLine },
     { action: "expand", label: "Expand", icon: ArrowUpWideNarrow },
     { action: "shorten", label: "Shorten", icon: ArrowDownWideNarrow },

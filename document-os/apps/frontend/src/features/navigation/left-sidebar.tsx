@@ -22,7 +22,7 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
   const { workspace, data: workspaces, isLoading, isError, refetch } = useCurrentWorkspace();
 
   return (
-    <div className="flex h-full flex-col bg-card/40">
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-card/40">
       <div className="flex h-[52px] items-center gap-1 border-b border-border/60 bg-background/80 px-2 backdrop-blur-sm">
         <div className="min-w-0 flex-1">
           {isLoading ? (
@@ -35,7 +35,7 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
           <Tooltip>
             <TooltipTrigger asChild>
               <Button size="icon-sm" variant="ghost" onClick={onCollapse} aria-label="Collapse sidebar">
-                <PanelLeftClose className="h-4 w-4" />
+                <PanelLeftClose className="h-4 w-4 shrink-0" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">Collapse sidebar</TooltipContent>
@@ -43,20 +43,20 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
         )}
       </div>
 
-      <div className="px-2 pb-1 pt-2">
+      <div className="min-w-0 px-2 pb-1 pt-2">
         <button
           onClick={() => setPaletteOpen(true)}
-          className="flex w-full items-center gap-2 rounded-md border border-border/60 bg-background/50 px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex min-w-0 w-full items-center gap-2 rounded-md border border-border/60 bg-background/50 px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          <Search className="h-3.5 w-3.5" />
-          <span className="flex-1 text-left">Search</span>
-          <kbd className="rounded border border-border/60 bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1 truncate text-left">Search</span>
+          <kbd className="shrink-0 rounded border border-border/60 bg-muted px-1 text-[10px] font-medium text-muted-foreground">
             Ctrl K
           </kbd>
         </button>
       </div>
 
-      <nav className="space-y-0.5 px-2 py-1">
+      <nav className="min-w-0 space-y-0.5 px-2 py-1">
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -64,20 +64,20 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
             end={end}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                "flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 isActive
                   ? "bg-accent font-medium text-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )
             }
           >
-            <Icon className="h-4 w-4" />
-            {label}
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="truncate">{label}</span>
           </NavLink>
         ))}
       </nav>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 min-w-0 flex-1 w-full">
         {isError ? (
           <ErrorState
             className="py-8"

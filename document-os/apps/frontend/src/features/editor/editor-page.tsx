@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { FilePlus2, Plus, Sparkles } from "lucide-react";
+import { FilePlus2, Plus } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -9,13 +9,15 @@ import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocumentTree } from "@/hooks/use-document-tree";
-import { useGenerationJob } from "@/hooks/use-generation-job";
 import { ApiClientError, documentApi, sectionApi, usersApi } from "@/lib/api-client";
 import { useUiStore } from "@/lib/ui-store";
 import { VersionsPanel } from "@/features/versions/versions-panel";
 import { EditorHeader } from "./editor-header";
 import { useEditorStore } from "./editor-store";
 import { GenerateDialog } from "./generate-dialog";
+import { GenerationProgress } from "./generation-progress";
+import { PlanningState } from "./planning-state";
+import { useGenerationStore } from "./generation-store";
 import { useExportDocument } from "./export-menu";
 import { SectionCard } from "./section-card";
 
@@ -57,8 +59,6 @@ export function EditorPage() {
   const autosaveInterval = settings?.autosave_interval_ms ?? 1500;
 
   const setLastDocumentId = useUiStore((s) => s.setLastDocumentId);
-  const jobId = useEditorStore((s) => s.jobId);
-  const setJobId = useEditorStore((s) => s.setJobId);
   const setGenerateOpen = useEditorStore((s) => s.setGenerateOpen);
   const scrollTarget = useEditorStore((s) => s.scrollTarget);
   const setScrollTarget = useEditorStore((s) => s.setScrollTarget);
@@ -66,24 +66,38 @@ export function EditorPage() {
   const clearRequestedAction = useEditorStore((s) => s.clearRequestedAction);
   const resetSaveStates = useEditorStore((s) => s.resetSaveStates);
 
-  const { job } = useGenerationJob(jobId, documentId);
-  const prevJobStatus = useRef<string | null>(null);
+  const genPhase = useGenerationStore((s) => (s.documentId === documentId ? s.phase : "idle"));
+  const currentSectionId = useGenerationStore((s) =>
+    s.documentId === documentId ? s.currentSectionId : null,
+  );
+  const prevGenPhase = useRef<string>("idle");
 
   useEffect(() => {
     if (documentId) setLastDocumentId(documentId);
     resetSaveStates();
-    setJobId(null);
-  }, [documentId, setLastDocumentId, resetSaveStates, setJobId]);
+  }, [documentId, setLastDocumentId, resetSaveStates]);
 
-  // Surface job completion when the generate dialog is closed.
+  // Toast on generation completion/failure (only while this doc is open).
   useEffect(() => {
-    const status = job?.status ?? null;
-    if (status && status !== prevJobStatus.current) {
-      if (status === "completed") toast.success("Document generation complete");
-      if (status === "failed") toast.error(job?.error ?? "Document generation failed");
+    if (genPhase !== prevGenPhase.current) {
+      if (genPhase === "completed") toast.success("Document generation complete");
+      if (genPhase === "failed") toast.error(useGenerationStore.getState().error ?? "Generation failed");
     }
-    prevJobStatus.current = status;
-  }, [job?.status, job?.error]);
+    prevGenPhase.current = genPhase;
+  }, [genPhase]);
+
+  // Gently follow the section the AI is currently writing.
+  useEffect(() => {
+    if (!currentSectionId) return;
+    const t = window.setTimeout(() => {
+      const el = window.document.getElementById(`section-${currentSectionId}`);
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const visible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+      if (!visible) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [currentSectionId]);
 
   // Scroll requests from the outline / palette / validation issues.
   useEffect(() => {
@@ -156,28 +170,31 @@ export function EditorPage() {
           transition={{ duration: 0.2 }}
           className="mx-auto max-w-3xl px-6 py-6"
         >
+          {(genPhase === "connecting" || genPhase === "planning") && <PlanningState />}
           {flat.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border">
-              <EmptyState
-                icon={FilePlus2}
-                title="This document is empty"
-                hint="Add sections manually, or let the AI plan and write the whole document from a prompt."
-                actionLabel="Generate with AI"
-                onAction={() => setGenerateOpen(true)}
-              />
-              <div className="flex justify-center pb-6">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground"
-                  onClick={() => addRootSection.mutate()}
-                  disabled={addRootSection.isPending}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add a section instead
-                </Button>
+            genPhase !== "connecting" && genPhase !== "planning" && (
+              <div className="rounded-lg border border-dashed border-border">
+                <EmptyState
+                  icon={FilePlus2}
+                  title="This document is empty"
+                  hint="Add sections manually, or let the AI plan and write the whole document from a prompt."
+                  actionLabel="Generate with AI"
+                  onAction={() => setGenerateOpen(true)}
+                />
+                <div className="flex justify-center pb-6">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground"
+                    onClick={() => addRootSection.mutate()}
+                    disabled={addRootSection.isPending}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add a section instead
+                  </Button>
+                </div>
               </div>
-            </div>
+            )
           ) : (
             <div className="space-y-3">
               {tree.map((node) => (
@@ -203,14 +220,7 @@ export function EditorPage() {
               </div>
             </div>
           )}
-          {job && (job.status === "running" || job.status === "pending") && (
-            <div className="sticky bottom-3 mt-4 flex items-center gap-2 rounded-lg border border-primary/30 bg-popover px-3 py-2 text-xs shadow-lg">
-              <Sparkles className="h-3.5 w-3.5 animate-pulse text-primary" />
-              <span className="flex-1">
-                Generating — {job.completed_sections} of {job.total_sections} sections complete
-              </span>
-            </div>
-          )}
+          <GenerationProgress documentId={doc.id} />
         </motion.div>
       </div>
       <GenerateDialog document={doc} />

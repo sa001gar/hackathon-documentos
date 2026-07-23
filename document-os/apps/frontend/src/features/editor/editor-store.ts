@@ -13,10 +13,9 @@ interface SectionSaveInfo {
 /**
  * Per-document editor UI state shared between the center canvas (editor page)
  * and the right inspector / slide-over panels (which live in the app shell).
+ * Document-generation pipeline state lives in ./generation-store.
  */
 interface EditorUiState {
-  jobId: string | null;
-  setJobId: (id: string | null) => void;
   generateOpen: boolean;
   setGenerateOpen: (open: boolean) => void;
   scrollTarget: string | null;
@@ -42,8 +41,6 @@ interface EditorUiState {
 }
 
 export const useEditorStore = create<EditorUiState>()((set) => ({
-  jobId: null,
-  setJobId: (jobId) => set({ jobId }),
   generateOpen: false,
   setGenerateOpen: (generateOpen) => set({ generateOpen }),
   scrollTarget: null,

@@ -133,4 +133,79 @@
   .tippy-box {
     @apply z-50;
   }
+
+  /* ---- Streaming / preview prose (premium document typography) ---- */
+  .docos-prose {
+    @apply text-[14px] leading-[1.75] text-foreground/90;
+  }
+  .docos-prose > *:first-child {
+    margin-top: 0;
+  }
+  .docos-prose h1 {
+    @apply mb-3 mt-6 text-[22px] font-semibold tracking-tight text-foreground;
+  }
+  .docos-prose h2 {
+    @apply mb-2.5 mt-6 text-[18px] font-semibold tracking-tight text-foreground;
+  }
+  .docos-prose h3 {
+    @apply mb-2 mt-5 text-[15.5px] font-semibold text-foreground;
+  }
+  .docos-prose h4 {
+    @apply mb-2 mt-4 text-[14px] font-semibold text-foreground;
+  }
+  .docos-prose p {
+    @apply my-3;
+  }
+  .docos-prose strong {
+    @apply font-semibold text-foreground;
+  }
+  .docos-prose ul,
+  .docos-prose ol {
+    @apply my-3 space-y-1.5 pl-6;
+  }
+  .docos-prose ul {
+    @apply list-disc;
+  }
+  .docos-prose ol {
+    @apply list-decimal;
+  }
+  .docos-prose li::marker {
+    @apply text-muted-foreground;
+  }
+  .docos-prose blockquote {
+    @apply my-4 rounded-r-md border-l-[3px] border-primary/40 bg-primary/[0.05] py-1.5 pl-4 pr-3 italic text-foreground/80;
+  }
+  .docos-prose code:not(pre code) {
+    @apply rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 font-mono text-[12.5px] text-foreground;
+  }
+  .docos-prose pre {
+    @apply my-4 overflow-x-auto rounded-lg border border-border bg-zinc-950 p-4 font-mono text-[13px] leading-relaxed text-zinc-100;
+  }
+  .docos-prose pre code {
+    @apply bg-transparent p-0 text-inherit;
+  }
+  .docos-prose table {
+    @apply my-4 w-full border-collapse overflow-hidden rounded-lg text-[13px];
+  }
+  .docos-prose thead th {
+    @apply border border-border bg-muted/70 px-3 py-2 text-left font-semibold text-foreground;
+  }
+  .docos-prose tbody td {
+    @apply border border-border px-3 py-2 align-top;
+  }
+  .docos-prose tbody tr:nth-child(even) {
+    @apply bg-muted/30;
+  }
+  .docos-prose hr {
+    @apply my-6 border-border/70;
+  }
+  .docos-prose a {
+    @apply text-primary underline underline-offset-2;
+  }
+  .docos-prose img {
+    @apply rounded-lg border border-border;
+  }
+  .docos-prose input[type="checkbox"] {
+    @apply mr-1.5 align-middle;
+  }
 }

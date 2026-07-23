@@ -1,13 +1,14 @@
+import { cn } from "@documentos/utils";
 import { useQuery } from "@tanstack/react-query";
-import { ListTree } from "lucide-react";
+import { Check, Clock, ListTree, XCircle } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { StatusDot, SECTION_DOT_COLORS } from "@/components/status";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocumentTree } from "@/hooks/use-document-tree";
-import { useGenerationJob } from "@/hooks/use-generation-job";
 import { documentApi } from "@/lib/api-client";
 import { useEditorStore } from "@/features/editor/editor-store";
+import { useGenerationStore } from "@/features/editor/generation-store";
 
 export function OutlineTab({ documentId }: { documentId: string }) {
   const { data: doc, isLoading } = useQuery({
@@ -15,9 +16,16 @@ export function OutlineTab({ documentId }: { documentId: string }) {
     queryFn: () => documentApi.get(documentId),
   });
   const { flat } = useDocumentTree(doc);
-  const jobId = useEditorStore((s) => s.jobId);
   const setScrollTarget = useEditorStore((s) => s.setScrollTarget);
-  const { job, active } = useGenerationJob(jobId, documentId);
+
+  // Live pipeline state. statusBySection only gets a new reference when a
+  // status flips (never per token), so this selector is safe and cheap.
+  const genStatusById = useGenerationStore((s) => s.statusBySection);
+  const currentSectionId = useGenerationStore((s) => s.currentSectionId);
+  const phase = useGenerationStore((s) => (s.documentId === documentId ? s.phase : "idle"));
+  const total = useGenerationStore((s) => s.totalSections);
+  const completed = useGenerationStore((s) => s.completedCount);
+  const active = phase === "planning" || phase === "generating" || phase === "connecting";
 
   if (isLoading) {
     return (
@@ -31,18 +39,17 @@ export function OutlineTab({ documentId }: { documentId: string }) {
 
   return (
     <div className="p-2">
-      {job && (active || job.status === "completed") && (
+      {active && (
         <div className="mb-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
           <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="font-medium">{active ? "Generating…" : "Generation complete"}</span>
-            <span className="text-muted-foreground">
-              {job.completed_sections}/{job.total_sections}
+            <span className="font-medium">
+              {phase === "planning" || phase === "connecting" ? "Planning…" : "Generating…"}
+            </span>
+            <span className="tabular-nums text-muted-foreground">
+              {completed}/{total}
             </span>
           </div>
-          <Progress
-            value={job.total_sections > 0 ? (job.completed_sections / job.total_sections) * 100 : 0}
-            className="h-1.5"
-          />
+          <Progress value={total > 0 ? (completed / total) * 100 : 5} className="h-1.5" />
         </div>
       )}
       {flat.length === 0 ? (
@@ -53,25 +60,54 @@ export function OutlineTab({ documentId }: { documentId: string }) {
         />
       ) : (
         <div className="space-y-0.5">
-          {flat.map(({ node, depth }) => (
-            <button
-              key={node.id}
-              onClick={() => setScrollTarget(node.id)}
-              style={{ paddingLeft: 8 + depth * 14 }}
-              className="flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[13px] hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <StatusDot
-                status={node.status}
-                map={SECTION_DOT_COLORS}
-                pulse={node.status === "generating"}
-                className="h-1.5 w-1.5"
-              />
-              <span className="min-w-0 flex-1 truncate">{node.title}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                {node.word_count > 0 ? node.word_count : ""}
-              </span>
-            </button>
-          ))}
+          {flat.map(({ node, depth }) => {
+            const genStatus = genStatusById[node.id];
+            const isCurrent = node.id === currentSectionId;
+            return (
+              <button
+                key={node.id}
+                onClick={() => setScrollTarget(node.id)}
+                style={{ paddingLeft: 8 + depth * 14 }}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[13px] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                  isCurrent && "bg-primary/10 hover:bg-primary/15",
+                )}
+              >
+                {genStatus === "completed" ? (
+                  <Check className="h-3 w-3 shrink-0 text-emerald-500" />
+                ) : genStatus === "failed" ? (
+                  <XCircle className="h-3 w-3 shrink-0 text-destructive" />
+                ) : genStatus === "generating" ? (
+                  <StatusDot
+                    status="generating"
+                    map={SECTION_DOT_COLORS}
+                    pulse
+                    className="h-1.5 w-1.5"
+                  />
+                ) : genStatus === "queued" ? (
+                  <Clock className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+                ) : (
+                  <StatusDot
+                    status={node.status}
+                    map={SECTION_DOT_COLORS}
+                    pulse={node.status === "generating"}
+                    className="h-1.5 w-1.5"
+                  />
+                )}
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate",
+                    isCurrent && "font-medium text-primary",
+                  )}
+                >
+                  {node.title}
+                </span>
+                <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                  {node.word_count > 0 ? node.word_count : ""}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

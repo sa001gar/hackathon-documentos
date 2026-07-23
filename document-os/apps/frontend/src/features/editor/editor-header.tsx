@@ -9,7 +9,7 @@ import {
   Loader2,
   PanelRight,
   ShieldCheck,
-  Sparkles,
+  WandSparkles,
   WifiOff,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -186,10 +186,10 @@ export function EditorHeader({ doc }: { doc: DocumentDetail }) {
 
         <Button
           size="sm"
-          className="h-8 gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 px-3 text-xs font-medium text-white shadow-sm hover:from-indigo-500 hover:to-violet-500"
+          className="h-8 gap-1.5 px-3 text-xs font-medium"
           onClick={() => setGenerateOpen(true)}
         >
-          <Sparkles className="h-3.5 w-3.5" />
+          <WandSparkles className="h-3.5 w-3.5" />
           Generate
         </Button>
 

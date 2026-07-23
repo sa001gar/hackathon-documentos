@@ -53,6 +53,23 @@ export function markdownToHtml(markdown: string): string {
   return typeof html === "string" ? upgradeTaskLists(html) : "";
 }
 
+/**
+ * Lightweight markdown → HTML for live streaming previews. Skips the
+ * math/task-list post-processing (DOMParser) so it stays cheap enough to run
+ * on every animation frame.
+ */
+export function markdownToHtmlFast(markdown: string): string {
+  if (!markdown.trim()) return "";
+  const html = marked.parse(markdown, { async: false });
+  return typeof html === "string" ? html : "";
+}
+
+/** Plain word count for streamed/generated text. */
+export function countWords(text: string): number {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
 /** Editor HTML → markdown (source of truth). */
 export function htmlToMarkdown(html: string): string {
   const td = new TurndownService({
