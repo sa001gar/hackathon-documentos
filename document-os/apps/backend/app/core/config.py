@@ -7,8 +7,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Database
+    # Database (SQLite default locally; set external Postgres URL in deployment)
     DATABASE_URL: str = "sqlite:///./documentos.db"
+    # Reserved — job runner is in-process; used when a Redis queue backend lands
+    REDIS_URL: str = ""
 
     # Auth
     JWT_SECRET: str = "change-me-in-production-0123456789abcdef"
@@ -17,9 +19,14 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # AI engine
-    AI_PROVIDER: str = "auto"  # auto | ollama | openai | mock
+    AI_PROVIDER: str = "auto"  # auto | google | ollama | openai | mock
+    # Google AI SDK (Gemma 4 hosted) — https://aistudio.google.com/apikey
+    GEMINI_API_KEY: str = ""
+    GOOGLE_MODEL: str = "gemma-4-26b-a4b-it"
+    # Ollama (Gemma running locally)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     GEMMA_MODEL: str = "gemma3"
+    # Any OpenAI-compatible server (vLLM, llama.cpp, LM Studio)
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     AI_REQUEST_TIMEOUT: int = 180

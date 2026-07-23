@@ -153,11 +153,20 @@ class JobRunner:
                     last_error: Exception | None = None
                     from app.core.config import get_settings
 
+                    timeout = get_settings().AI_REQUEST_TIMEOUT * 3
                     for _attempt in range(get_settings().AI_MAX_RETRIES + 1):
                         try:
-                            await engine.generate_section(db2, section_id=section.id)
+                            await asyncio.wait_for(
+                                engine.generate_section(db2, section_id=section.id),
+                                timeout=timeout,
+                            )
                             last_error = None
                             break
+                        except asyncio.TimeoutError:
+                            last_error = TimeoutError(
+                                f"Section generation timed out after {timeout}s"
+                            )
+                            logger.warning("Section %s timed out (%ds).", section.id, timeout)
                         except Exception as exc:  # per-section resilience
                             last_error = exc
                             logger.warning("Section %s generation failed: %s", section.id, exc)

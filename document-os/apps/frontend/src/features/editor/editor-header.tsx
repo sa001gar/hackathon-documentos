@@ -66,7 +66,7 @@ function TitleInput({ doc }: { doc: DocumentDetail }) {
         }
       }}
       aria-label="Document title"
-      className="min-w-0 flex-1 rounded bg-transparent px-1.5 py-1 text-[15px] font-semibold tracking-tight outline-none transition-colors hover:bg-accent/60 focus:bg-accent focus:ring-1 focus:ring-ring"
+      className="w-full truncate rounded-md bg-transparent px-2 py-1 text-sm font-semibold tracking-tight outline-none transition-colors hover:bg-accent/60 focus:bg-accent focus:ring-1 focus:ring-ring"
     />
   );
 }
@@ -89,7 +89,7 @@ function SaveIndicator() {
 
   if (!online || aggregate === "offline") {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-amber-500">
+      <span className="flex shrink-0 items-center gap-1.5 text-xs text-amber-500">
         <WifiOff className="h-3.5 w-3.5" />
         Offline
       </span>
@@ -97,7 +97,7 @@ function SaveIndicator() {
   }
   if (aggregate === "saving") {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         Saving…
       </span>
@@ -105,7 +105,7 @@ function SaveIndicator() {
   }
   if (aggregate === "error") {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-destructive">
+      <span className="flex shrink-0 items-center gap-1.5 text-xs text-destructive">
         <AlertCircle className="h-3.5 w-3.5" />
         Save failed
       </span>
@@ -113,14 +113,14 @@ function SaveIndicator() {
   }
   if (typeof aggregate === "object") {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Check className="h-3.5 w-3.5 text-emerald-500" />
         Saved · {formatRelativeTime(new Date(aggregate.at).toISOString())}
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+    <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/60">
       <Check className="h-3.5 w-3.5" />
       Idle
     </span>
@@ -136,64 +136,77 @@ export function EditorHeader({ doc }: { doc: DocumentDetail }) {
   const setRightCollapsed = useUiStore((s) => s.setRightCollapsed);
 
   return (
-    <div className="flex items-center gap-2 border-b border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button size="icon-sm" variant="ghost" aria-label="Back to dashboard" onClick={() => navigate("/")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Back to dashboard</TooltipContent>
-      </Tooltip>
+    <div className="flex h-[52px] items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-3 backdrop-blur-sm">
+      <div className="flex min-w-0 items-center gap-2">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="icon-sm" variant="ghost" aria-label="Back to dashboard" onClick={() => navigate("/")}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Back to dashboard</TooltipContent>
+        </Tooltip>
 
-      <div className="min-w-0 flex-1">
-        <TitleInput doc={doc} />
+        <div className="min-w-0 max-w-xs sm:max-w-md md:max-w-lg">
+          <TitleInput doc={doc} />
+        </div>
+
+        <DocumentStatusBadge status={doc.status} className="hidden shrink-0 sm:inline-flex" />
+        <SaveIndicator />
       </div>
 
-      <span className="hidden shrink-0 text-xs text-muted-foreground md:inline">
-        {doc.word_count.toLocaleString()} words
-      </span>
-      <DocumentStatusBadge status={doc.status} className="hidden sm:inline-flex" />
-      <SaveIndicator />
+      <div className="flex shrink-0 items-center gap-1.5">
+        <span className="hidden rounded bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground/80 md:inline-block">
+          {doc.word_count.toLocaleString()} words
+        </span>
 
-      <div className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <div className="mx-1 h-4 w-px bg-border/60" aria-hidden />
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button size="sm" variant="ghost" onClick={requestValidate}>
-            <ShieldCheck className="h-4 w-4" />
-            <span className="hidden lg:inline">Validate</span>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Run structural validation</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button size="sm" variant="ghost" onClick={requestReview}>
-            <ClipboardCheck className="h-4 w-4" />
-            <span className="hidden lg:inline">Review</span>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Run AI quality review</TooltipContent>
-      </Tooltip>
-      <ExportMenu documentId={doc.id} title={doc.title} />
-      <Button size="sm" onClick={() => setGenerateOpen(true)}>
-        <Sparkles className="h-4 w-4" />
-        Generate
-      </Button>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Toggle inspector"
-            onClick={() => setRightCollapsed(!rightCollapsed)}
-          >
-            <PanelRight className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Toggle inspector</TooltipContent>
-      </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2.5 text-xs" onClick={requestValidate}>
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="hidden lg:inline">Validate</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Run structural validation</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2.5 text-xs" onClick={requestReview}>
+              <ClipboardCheck className="h-3.5 w-3.5 text-indigo-500" />
+              <span className="hidden lg:inline">Review</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Run AI quality review</TooltipContent>
+        </Tooltip>
+
+        <ExportMenu documentId={doc.id} title={doc.title} />
+
+        <Button
+          size="sm"
+          className="h-8 gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 px-3 text-xs font-medium text-white shadow-sm hover:from-indigo-500 hover:to-violet-500"
+          onClick={() => setGenerateOpen(true)}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Generate
+        </Button>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Toggle inspector"
+              onClick={() => setRightCollapsed(!rightCollapsed)}
+            >
+              <PanelRight className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Toggle inspector</TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   );
 }

@@ -38,9 +38,11 @@ jobs/             → In-process async generation runner (resumable).
 
 `app.ai.engine.AIEngine` is the single entry point used by the API layer.
 
-- **Providers** (`ai/providers/`): `ollama` (local Gemma via Ollama), `openai` (any
-  OpenAI-compatible server: vLLM, llama.cpp, LM Studio), `mock` (deterministic, offline demo
-  fallback — clearly flagged in logs). `AI_PROVIDER=auto` probes Ollama and falls back to mock.
+- **Providers** (`ai/providers/`): `google` (hosted **Gemma 4** via the `google-genai` SDK,
+  async `client.aio` interface), `ollama` (local Gemma), `openai` (any OpenAI-compatible
+  server: vLLM, llama.cpp, LM Studio), `mock` (deterministic offline demo fallback — clearly
+  flagged in logs and `/health`). `AI_PROVIDER=auto` resolves: `GEMINI_API_KEY` → Google AI,
+  else reachable Ollama → Ollama, else mock.
 - **Agents** (`ai/agents/`): each agent has a dedicated system prompt (DB-backed `ai_prompts`,
   seeded from `packages/prompts/*.md`, file fallback), independent config (temperature,
   max_tokens), a dedicated output parser, structured outputs (Pydantic), retry-on-parse-failure,
@@ -64,8 +66,9 @@ incomplete section. Cancellation is cooperative (checked between sections).
    `document_versions` row; restore appends a new version (history is never rewritten).
 3. **SQLite by default, PostgreSQL-ready** — portable types (String UUIDs, generic JSON);
    switch with `DATABASE_URL`. Alembic scaffolded for production migrations.
-4. **In-process job runner by default** — zero-infra dev. Interface is swappable for a
-   Redis/Celery backend (Redis included in docker-compose for that evolution).
+4. **In-process job runner** — no Redis required anywhere; jobs resume after restarts.
+   The interface (`jobs/runner.py`) is swappable for a Redis/Celery backend when scaling
+   out (`REDIS_URL` is already accepted config).
 5. **AI is always traceable** — every agent call writes an `ai_logs` row (prompt, response,
    model, latency, status) surfaced in the UI's activity feed.
 6. **Demo resilience** — if Ollama/Gemma is unreachable, `auto` provider falls back to a

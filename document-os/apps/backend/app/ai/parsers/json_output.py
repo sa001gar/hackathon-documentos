@@ -13,12 +13,23 @@ class AIParseError(Exception):
         self.raw_text = raw_text
 
 
+def _preview(text: str, max_len: int = 300) -> str:
+    """First max_len characters of text, with newlines collapsed."""
+    flat = " ".join(text.splitlines())
+    return flat[:max_len] + ("..." if len(flat) > max_len else "")
+
+
 def extract_json(text: str) -> dict | list:
     """Extract the first balanced JSON object/array from a model response.
 
     Tolerates markdown fences and surrounding prose; ignores braces inside strings.
     """
     cleaned = text.strip()
+    # Strip leading/trailing markdown code fences (```json ... ``` or just ``` ... ```)
+    import re as _re
+    cleaned = _re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = _re.sub(r"\n?```\s*$", "", cleaned)
+    cleaned = cleaned.strip()
     for opener, closer in (("{", "}"), ("[", "]")):
         start = cleaned.find(opener)
         if start == -1:
@@ -47,8 +58,8 @@ def extract_json(text: str) -> dict | list:
                     try:
                         return json.loads(cleaned[start : i + 1])
                     except json.JSONDecodeError as exc:
-                        raise AIParseError(f"Invalid JSON payload: {exc}", text) from exc
-    raise AIParseError("No JSON object found in response", text)
+                        raise AIParseError(f"Invalid JSON payload: {exc}\nRaw preview: {_preview(text)}", text) from exc
+    raise AIParseError(f"No JSON object found in response\nRaw preview: {_preview(text)}", text)
 
 
 def parse_planner_output(text: str) -> PlannerOutput:

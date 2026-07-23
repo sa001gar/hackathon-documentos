@@ -113,6 +113,8 @@ export const MathNode = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
+    // The TeX source is included as text content: turndown drops empty inline
+    // elements as "blank", and its math rule reads data-tex back to `$...$`.
     return [
       "span",
       mergeAttributes(HTMLAttributes, {
@@ -121,6 +123,7 @@ export const MathNode = Node.create({
         "data-display": String(node.attrs.display ?? "inline"),
         class: "docos-math",
       }),
+      String(node.attrs.tex ?? ""),
     ];
   },
 

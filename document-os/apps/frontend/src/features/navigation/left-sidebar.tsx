@@ -23,7 +23,7 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
 
   return (
     <div className="flex h-full flex-col bg-card/40">
-      <div className="flex items-center gap-1 px-2 pb-1 pt-2">
+      <div className="flex h-[52px] items-center gap-1 border-b border-border/60 bg-background/80 px-2 backdrop-blur-sm">
         <div className="min-w-0 flex-1">
           {isLoading ? (
             <Skeleton className="h-8 w-full" />
@@ -43,7 +43,7 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
         )}
       </div>
 
-      <div className="px-2 pb-1">
+      <div className="px-2 pb-1 pt-2">
         <button
           onClick={() => setPaletteOpen(true)}
           className="flex w-full items-center gap-2 rounded-md border border-border/60 bg-background/50 px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

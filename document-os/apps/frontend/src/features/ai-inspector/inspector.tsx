@@ -18,8 +18,8 @@ export function Inspector({ documentId }: { documentId: string }) {
         onValueChange={(v) => setTab(v as InspectorTab)}
         className="flex h-full flex-col"
       >
-        <div className="border-b border-border/60 px-2 pt-2">
-          <TabsList className="grid w-full grid-cols-4">
+        <div className="flex h-[52px] items-center border-b border-border/60 bg-background/80 px-2 backdrop-blur-sm">
+          <TabsList className="grid h-8 w-full grid-cols-4">
             <TabsTrigger value="outline" className="text-xs">
               Outline
             </TabsTrigger>

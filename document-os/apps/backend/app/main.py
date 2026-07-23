@@ -74,5 +74,9 @@ def health():
         "status": "ok",
         "service": "documentos-api",
         "ai_provider": current_provider_name(),
-        "gemma_model": settings.GEMMA_MODEL,
+        "gemma_model": (
+            settings.GOOGLE_MODEL
+            if (settings.GEMINI_API_KEY and settings.AI_PROVIDER in ("auto", "google"))
+            else settings.GEMMA_MODEL
+        ),
     }

@@ -66,7 +66,8 @@ class BaseAgent:
                         LLMMessage(role="assistant", content=raw_text),
                         LLMMessage(
                             role="user",
-                            content="Your previous reply was invalid. Reply with ONLY the valid output, exactly in the requested format.",
+                            content="Your previous reply was invalid — it did not contain valid JSON in the expected format. "
+                            "Reply with ONLY a valid JSON object matching the schema, no other text, no code fences, no backticks.",
                         ),
                     ]
             latency_ms = int((time.perf_counter() - started) * 1000)

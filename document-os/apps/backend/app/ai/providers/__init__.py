@@ -17,7 +17,11 @@ _provider: LLMProvider | None = None
 
 
 async def aget_provider() -> LLMProvider:
-    """Resolve (once) and return the active provider."""
+    """Resolve (once) and return the active provider.
+
+    Priority under `auto`: Google AI (Gemma 4, needs GEMINI_API_KEY) →
+    Ollama (local Gemma) → mock (offline demo).
+    """
     global _provider
     if _provider is not None:
         return _provider
@@ -30,19 +34,28 @@ async def aget_provider() -> LLMProvider:
         _provider = OpenAICompatProvider()
     elif mode == "ollama":
         _provider = OllamaProvider()
+    elif mode == "google":
+        from app.ai.providers.google_ai import GoogleAIProvider
+
+        _provider = GoogleAIProvider()
     else:  # auto
-        ollama = OllamaProvider()
-        if await ollama.is_available():
-            _provider = ollama
-            logger.info("AI provider: Ollama serving %s", ollama.model)
+        if settings.GEMINI_API_KEY:
+            from app.ai.providers.google_ai import GoogleAIProvider
+
+            _provider = GoogleAIProvider()
+            logger.info("AI provider: Google AI serving %s", settings.GOOGLE_MODEL)
         else:
-            _provider = MockProvider()
-            logger.warning(
-                "Gemma unreachable at %s — using offline demo provider. "
-                "Run `ollama serve` and `ollama pull %s` for real generation.",
-                settings.OLLAMA_BASE_URL,
-                settings.GEMMA_MODEL,
-            )
+            ollama = OllamaProvider()
+            if await ollama.is_available():
+                _provider = ollama
+                logger.info("AI provider: Ollama serving %s", ollama.model)
+            else:
+                _provider = MockProvider()
+                logger.warning(
+                    "No Gemma runtime found (set GEMINI_API_KEY or run `ollama serve` "
+                    "&& `ollama pull %s`) — using offline demo provider.",
+                    settings.GEMMA_MODEL,
+                )
     return _provider
 
 
@@ -62,7 +75,16 @@ __all__ = [
     "MockProvider",
     "OllamaProvider",
     "OpenAICompatProvider",
+    "GoogleAIProvider",
     "aget_provider",
     "current_provider_name",
     "reset_provider",
 ]
+
+
+def __getattr__(name: str):  # lazy optional import
+    if name == "GoogleAIProvider":
+        from app.ai.providers.google_ai import GoogleAIProvider
+
+        return GoogleAIProvider
+    raise AttributeError(name)
