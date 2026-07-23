@@ -1,145 +1,275 @@
-"""The Gemma Engine: single entry point for all LLM calls.
+"""AIEngine — the ONLY entry point the API layer uses for AI work.
 
-Responsibilities:
-- Resolve the active provider (auto -> ollama if healthy else mock).
-- Retries with backoff.
-- Mock-provider safety net so a live demo can never hard-fail.
-- Traceability: every call is reported through a log callback (persisted to ai_logs).
-
-API endpoints NEVER call providers directly; they go through agents, which go
-through this engine.
+Never call providers from endpoints or services; everything funnels through here.
 """
-import asyncio
-import logging
-import time
-from typing import Awaitable, Callable, Optional
+from datetime import datetime, timezone
+from typing import AsyncIterator
 
-from app.ai.providers import BaseProvider, MockProvider, OllamaProvider, OpenAIProvider
-from app.ai.schemas import LLMResponse
-from app.core.config import get_settings
+from sqlalchemy.orm import Session
 
-logger = logging.getLogger("documentos.ai")
+from app.ai.agents import (
+    ExporterAgent,
+    PlannerAgent,
+    RefinerAgent,
+    ReviewerAgent,
+    ValidatorAgent,
+    WriterAgent,
+)
+from app.ai.parsers import clean_markdown_output
+from app.ai.prompts import get_prompt, render
+from app.ai.providers import aget_provider
+from app.ai.schemas import LLMMessage, PlannerOutput, SectionContext
+from app.core.errors import AIProviderError, NotFoundError
+from app.models import Document, DocumentSection
+from app.repositories import document_repo, section_repo
+from app.schemas.ai import RefineAction, ReviewReport, ValidationIssue, ValidationReport
 
-LogCallback = Callable[[dict], None]
+
+def _persist_section_content(
+    db: Session, section: DocumentSection, content: str, agent: str, summary: str
+) -> DocumentSection:
+    """Persist AI-written content (lazy service import keeps layers clean + testable)."""
+    from app.services import section_service
+
+    return section_service.update_content(
+        db, section, content, source="ai", agent=agent, change_summary=summary
+    )
 
 
-class GemmaEngine:
-    def __init__(self, log_callback: Optional[LogCallback] = None) -> None:
-        self._settings = get_settings()
-        self._log_callback = log_callback
-        self._provider: BaseProvider | None = None
-        self._mock = MockProvider()
-        self._lock = asyncio.Lock()
+class AIEngine:
+    # ---------- context builders ----------
 
-    async def _resolve_provider(self) -> BaseProvider:
-        async with self._lock:
-            if self._provider is not None:
-                return self._provider
-            mode = self._settings.AI_PROVIDER.lower()
-            if mode == "mock":
-                self._provider = self._mock
-            elif mode == "openai":
-                self._provider = OpenAIProvider()
-            elif mode == "ollama":
-                self._provider = OllamaProvider()
-            else:  # auto
-                ollama = OllamaProvider()
-                if await ollama.health():
-                    self._provider = ollama
-                    logger.info("AI provider: Ollama (%s)", ollama.model)
-                else:
-                    self._provider = self._mock
-                    logger.warning(
-                        "Ollama not reachable at %s — using mock provider (offline demo mode).",
-                        ollama.base_url,
-                    )
-            return self._provider
+    def _outline(self, db: Session, document_id: str) -> str:
+        from app.services import document_service
 
-    @property
-    def active_provider_name(self) -> str:
-        return self._provider.name if self._provider else "unresolved"
+        sections = document_service.get_sections(db, document_id)
+        depth: dict[str | None, int] = {None: 0}
+        lines = []
+        for s in sections:
+            d = depth.get(s.parent_id, 0) + (1 if s.parent_id else 0)
+            depth[s.id] = d
+            marker = "" if s.content.strip() else "  [empty]"
+            lines.append(f"{'  ' * d}- {s.title}{marker}")
+        return "\n".join(lines)
 
-    async def generate(
-        self,
-        *,
-        agent: str,
-        system: str,
-        prompt: str,
-        temperature: float = 0.4,
-        document_id: str | None = None,
-        section_id: str | None = None,
-    ) -> LLMResponse:
-        provider = await self._resolve_provider()
-        max_attempts = self._settings.AI_MAX_RETRIES + 1
-        last_error: Exception | None = None
-        started = time.perf_counter()
+    def _section_path(self, section: DocumentSection) -> str:
+        parts = [section.title]
+        cursor = section.parent
+        while cursor is not None:
+            parts.append(cursor.title)
+            cursor = cursor.parent
+        return " > ".join(reversed(parts))
 
-        for attempt in range(max_attempts):
-            try:
-                response = await provider.generate(system, prompt, temperature)
-                response.latency_ms = int((time.perf_counter() - started) * 1000)
-                self._log(agent, response, system, prompt, "ok", "", document_id, section_id)
-                return response
-            except Exception as exc:  # noqa: BLE001 — any provider failure is recoverable here
-                last_error = exc
-                logger.warning("Provider %s attempt %d failed: %s", provider.name, attempt + 1, exc)
-                await asyncio.sleep(min(2**attempt, 4))
+    def _sections_dump(self, db: Session, document_id: str) -> str:
+        from app.services import document_service
 
-        # Safety net: deterministic mock keeps the demo alive.
-        logger.error("Provider %s exhausted retries (%s). Falling back to mock.", provider.name, last_error)
-        response = await self._mock.generate(system, prompt, temperature)
-        response.latency_ms = int((time.perf_counter() - started) * 1000)
-        self._log(
-            agent, response, system, prompt, "ok",
-            f"primary provider failed: {last_error}", document_id, section_id,
+        parts = []
+        for s in document_service.get_sections(db, document_id):
+            parts.append(f"SECTION: {s.title}\n{s.content.strip() or '(empty)'}\n")
+        return "\n".join(parts)
+
+    def _build_context(self, db: Session, section: DocumentSection, instructions: str | None) -> SectionContext:
+        from app.services import document_service
+
+        document = document_repo.get(db, section.document_id)
+        if document is None:
+            raise NotFoundError("Document not found")
+        return SectionContext(
+            document_title=document.title,
+            document_description=document.description or "",
+            outline=self._outline(db, document.id),
+            section_title=section.title,
+            section_path=self._section_path(section),
+            brief=section.ai_prompt or "",
+            instructions=instructions or "",
         )
-        return response
 
-    def _log(
-        self, agent: str, response: LLMResponse, system: str, prompt: str,
-        status: str, error: str, document_id: str | None, section_id: str | None,
-    ) -> None:
-        if not self._log_callback:
-            return
+    # ---------- public API ----------
+
+    async def plan(
+        self,
+        db: Session,
+        *,
+        prompt: str,
+        existing_structure: list[dict] | None = None,
+        document_id: str | None = None,
+    ) -> PlannerOutput:
+        return await PlannerAgent(db).plan(
+            db, prompt=prompt, existing_structure=existing_structure, document_id=document_id
+        )
+
+    async def generate_section(
+        self, db: Session, *, section_id: str, instructions: str | None = None
+    ) -> DocumentSection:
+        section = section_repo.get(db, section_id)
+        if section is None:
+            raise NotFoundError("Section not found")
+        section.status = "generating"
+        db.add(section)
+        db.commit()
         try:
-            self._log_callback({
-                "agent": agent,
-                "model": response.model,
-                "provider": response.provider,
-                "prompt": f"[SYSTEM]\n{system}\n\n[USER]\n{prompt}"[:8000],
-                "response": response.text[:8000],
-                "latency_ms": response.latency_ms,
-                "status": status,
-                "error": error[:2000],
-                "document_id": document_id,
-                "section_id": section_id,
-            })
-        except Exception:  # noqa: BLE001 — logging must never break generation
-            logger.exception("Failed to record AI log")
+            context = self._build_context(db, section, instructions)
+            content = await WriterAgent(db).write(
+                db, context=context, document_id=section.document_id, section_id=section.id
+            )
+            section = _persist_section_content(db, section, content, "writer", "AI generation")
+            section.status = "draft"
+            db.add(section)
+            db.commit()
+            db.refresh(section)
+            return section
+        except Exception:
+            section.status = "error"
+            db.add(section)
+            db.commit()
+            raise
+
+    async def stream_section(
+        self, db: Session, *, section_id: str, instructions: str | None = None
+    ) -> AsyncIterator[str]:
+        """Yield writer tokens as they arrive; persist the cleaned result at the end."""
+        from app.repositories import ai_log_repo
+
+        section = section_repo.get(db, section_id)
+        if section is None:
+            raise NotFoundError("Section not found")
+        section.status = "generating"
+        db.add(section)
+        db.commit()
+
+        context = self._build_context(db, section, instructions)
+        agent = WriterAgent(db)
+        system = render(agent.system_prompt)
+        user_prompt = agent.build_user_prompt(context)
+        messages = [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user_prompt)]
+        provider = await aget_provider()
+
+        chunks: list[str] = []
+        try:
+            async for token in provider.stream(
+                messages, temperature=agent.temperature, max_tokens=agent.max_tokens
+            ):
+                chunks.append(token)
+                yield token
+        except AIProviderError:
+            section.status = "error"
+            db.add(section)
+            db.commit()
+            raise
+
+        content = clean_markdown_output("".join(chunks))
+        _persist_section_content(db, section, content, "writer", "AI streaming generation")
+        section.status = "draft"
+        db.add(section)
+        db.commit()
+        ai_log_repo.create_log(
+            db,
+            document_id=section.document_id,
+            section_id=section.id,
+            agent="writer",
+            action="stream",
+            model=getattr(provider, "model", provider.name),
+            system_prompt=system[:8000],
+            user_prompt=user_prompt[:8000],
+            response=content[:8000],
+            latency_ms=0,
+            status="success",
+        )
+
+    async def refine(
+        self,
+        db: Session,
+        *,
+        section_id: str,
+        action: RefineAction,
+        selected_text: str,
+        instruction: str | None = None,
+    ) -> str:
+        section = section_repo.get(db, section_id)
+        if section is None:
+            raise NotFoundError("Section not found")
+        document = document_repo.get(db, section.document_id)
+        return await RefinerAgent(db).refine(
+            db,
+            action=action,
+            selected_text=selected_text,
+            instruction=instruction,
+            doc_title=document.title if document else "",
+            section_title=section.title,
+            document_id=section.document_id,
+            section_id=section.id,
+        )
+
+    async def validate_document(self, db: Session, *, document_id: str) -> ValidationReport:
+        from app.services import document_service
+
+        document = document_service.get(db, document_id)
+        is_valid, summary, raw_issues = await ValidatorAgent(db).validate(
+            db,
+            doc_title=document.title,
+            outline=self._outline(db, document_id),
+            sections_dump=self._sections_dump(db, document_id),
+            document_id=document_id,
+        )
+        sections = document_service.get_sections(db, document_id)
+        by_title = {s.title.strip().lower(): s for s in sections}
+        issues: list[ValidationIssue] = []
+        for raw in raw_issues:
+            title = (raw.get("section_title") or "").strip().lower()
+            section = by_title.get(title)
+            issue = ValidationIssue(
+                type=str(raw.get("type", "structure")),
+                severity=str(raw.get("severity", "info")),
+                message=str(raw.get("message", "")),
+                section_id=section.id if section else None,
+                suggestion=raw.get("suggestion"),
+            )
+            issues.append(issue)
+            if section is not None and issue.severity != "error":
+                section.status = "validated"
+                db.add(section)
+        if is_valid:
+            document.status = "validated"
+            db.add(document)
+        db.commit()
+        return ValidationReport(
+            is_valid=is_valid,
+            summary=summary,
+            issues=issues,
+            checked_at=datetime.now(timezone.utc),
+        )
+
+    async def review_document(self, db: Session, *, document_id: str) -> ReviewReport:
+        from app.services import document_service
+
+        document = document_service.get(db, document_id)
+        report = await ReviewerAgent(db).review(
+            db,
+            doc_title=document.title,
+            outline=self._outline(db, document_id),
+            sections_dump=self._sections_dump(db, document_id),
+            document_id=document_id,
+        )
+        document.status = "reviewed"
+        db.add(document)
+        db.commit()
+        return report
+
+    async def executive_summary(self, db: Session, *, document_id: str) -> str:
+        from app.services import document_service
+
+        document = document_service.get(db, document_id)
+        return await ExporterAgent(db).summarize(
+            db,
+            doc_title=document.title,
+            outline=self._outline(db, document_id),
+            sections_dump=self._sections_dump(db, document_id),
+            document_id=document_id,
+        )
 
 
-# Module-level singleton; log callback is (re)bound per request by services.
-_engine: GemmaEngine | None = None
+_engine = AIEngine()
 
 
-def get_engine(log_callback: Optional[LogCallback] = None) -> GemmaEngine:
-    global _engine
-    if _engine is None:
-        _engine = GemmaEngine(log_callback=log_callback)
-    elif log_callback is not None:
-        _engine._log_callback = log_callback
+def get_ai_engine() -> AIEngine:
     return _engine
-
-
-def run_sync(coro: Awaitable):
-    """Run an async coroutine from sync service code (background threads included)."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    # Inside a running loop (uvicorn request thread): schedule and block via a new loop
-    # in a separate thread to avoid nested-loop errors.
-    import concurrent.futures
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(lambda: asyncio.run(coro)).result()

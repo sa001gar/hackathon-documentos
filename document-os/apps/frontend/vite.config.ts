@@ -23,7 +23,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          editor: ["@tiptap/react", "@tiptap/starter-kit", "@tiptap/pm"],
+          editor: ["@tiptap/react", "@tiptap/starter-kit", "@tiptap/core"],
           mermaid: ["mermaid"],
           vendor: ["react", "react-dom", "react-router-dom", "@tanstack/react-query"],
         },

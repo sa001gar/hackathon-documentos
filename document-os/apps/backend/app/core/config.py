@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./documentos.db"
 
     # Auth
-    JWT_SECRET: str = "change-me-in-production"
+    JWT_SECRET: str = "change-me-in-production-0123456789abcdef"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

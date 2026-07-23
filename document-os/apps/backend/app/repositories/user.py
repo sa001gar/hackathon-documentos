@@ -1,34 +1,20 @@
-"""User / workspace / project repositories."""
+"""User and per-user settings repositories."""
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Document, Project, User, Workspace
+from app.models import User, UserSettings
 from app.repositories.base import BaseRepository
 
 
 class UserRepository(BaseRepository[User]):
-    model = User
-
-    def get_by_email(self, email: str) -> User | None:
-        return self.db.scalar(select(User).where(User.email == email.lower()))
-
-
-class WorkspaceRepository(BaseRepository[Workspace]):
-    model = Workspace
-
-    def for_user(self, user_id: str) -> list[Workspace]:
-        return list(self.db.scalars(select(Workspace).where(Workspace.owner_id == user_id)))
+    def get_by_email(self, db: Session, email: str) -> User | None:
+        """Find a user by email (case-insensitive)."""
+        stmt = select(User).where(func.lower(User.email) == email.lower())
+        return db.scalar(stmt)
 
 
-class ProjectRepository(BaseRepository[Project]):
-    model = Project
-
-    def for_workspace(self, workspace_id: str) -> list[tuple[Project, int]]:
-        stmt = (
-            select(Project, func.count(Document.id).label("doc_count"))
-            .outerjoin(Document, Document.project_id == Project.id)
-            .where(Project.workspace_id == workspace_id)
-            .group_by(Project.id)
-            .order_by(Project.created_at)
-        )
-        return [(row[0], row[1]) for row in self.db.execute(stmt).all()]
+class UserSettingsRepository(BaseRepository[UserSettings]):
+    def get_by_user(self, db: Session, user_id: str) -> UserSettings | None:
+        """Return the settings row for a user, if it exists."""
+        stmt = select(UserSettings).where(UserSettings.user_id == user_id)
+        return db.scalar(stmt)

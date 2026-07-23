@@ -1,65 +1,111 @@
-"""Base agent: prompt resolution, JSON extraction, error handling."""
-import json
-import re
-from abc import ABC
-from typing import Any, TypeVar
+"""BaseAgent: prompt resolution, provider call, parse-retry, AILog tracing.
 
-from pydantic import BaseModel, ValidationError
+Every specialized agent inherits this. Agents never touch the DB session beyond
+reading their prompt config and writing their call log.
+"""
+import time
+from typing import Callable, TypeVar
 
-from app.ai.engine import GemmaEngine
-from app.ai.prompts import get_system_prompt
+from sqlalchemy.orm import Session
 
-T = TypeVar("T", bound=BaseModel)
+from app.ai.parsers import AIParseError
+from app.ai.prompts import get_prompt, render
+from app.ai.providers import aget_provider
+from app.ai.schemas import LLMMessage
+from app.core.config import get_settings
+from app.core.errors import AIProviderError
+
+T = TypeVar("T")
 
 
-class AgentParseError(Exception):
-    pass
+class BaseAgent:
+    """Dedicated system prompt + config + parser + tracing for one agent."""
 
-
-class BaseAgent(ABC):
     name: str = "base"
 
-    def __init__(self, engine: GemmaEngine, prompt_override: str | None = None) -> None:
-        self.engine = engine
-        self.system_prompt = get_system_prompt(self.name, override=prompt_override)
+    def __init__(self, db: Session):
+        template, self.temperature, self.max_tokens = get_prompt(db, self.name)
+        self.system_prompt = template
 
-    # -- response parsing -------------------------------------------------
+    async def run(
+        self,
+        db: Session,
+        *,
+        user_prompt: str,
+        system_vars: dict | None = None,
+        parser: Callable[[str], T] | None = None,
+        document_id: str | None = None,
+        section_id: str | None = None,
+    ) -> T | str:
+        """Call the provider; parse + retry on structured outputs; always log."""
+        from app.repositories import ai_log_repo  # lazy import: layering
 
-    @staticmethod
-    def extract_json(text: str) -> Any:
-        """Extract the first JSON object/array from a model response.
+        system = render(self.system_prompt, **(system_vars or {}))
+        messages = [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user_prompt)]
+        provider = await aget_provider()
+        max_attempts = get_settings().AI_MAX_RETRIES + 1
 
-        Tolerant to prose around the JSON and to markdown code fences.
-        """
-        cleaned = re.sub(r"```(?:json)?", "", text).replace("```", "")
-        for opener, closer in (("{", "}"), ("[", "]")):
-            start = cleaned.find(opener)
-            if start == -1:
-                continue
-            depth = 0
-            for i in range(start, len(cleaned)):
-                ch = cleaned[i]
-                if ch == opener:
-                    depth += 1
-                elif ch == closer:
-                    depth -= 1
-                    if depth == 0:
-                        try:
-                            return json.loads(cleaned[start : i + 1])
-                        except json.JSONDecodeError:
-                            break
-        raise AgentParseError("No valid JSON found in model response")
-
-    def parse_json(self, text: str, model: type[T]) -> T:
-        data = self.extract_json(text)
+        raw_text = ""
+        started = time.perf_counter()
         try:
-            return model.model_validate(data)
-        except ValidationError as exc:
-            raise AgentParseError(f"JSON did not match schema: {exc}") from exc
+            for attempt in range(max_attempts):
+                response = await provider.complete(
+                    messages, temperature=self.temperature, max_tokens=self.max_tokens
+                )
+                raw_text = response.text
+                if parser is None:
+                    result: T | str = raw_text
+                    break
+                try:
+                    result = parser(raw_text)
+                    break
+                except AIParseError:
+                    if attempt >= max_attempts - 1:
+                        raise
+                    messages = messages + [
+                        LLMMessage(role="assistant", content=raw_text),
+                        LLMMessage(
+                            role="user",
+                            content="Your previous reply was invalid. Reply with ONLY the valid output, exactly in the requested format.",
+                        ),
+                    ]
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            ai_log_repo.create_log(
+                db,
+                document_id=document_id,
+                section_id=section_id,
+                agent=self.name,
+                action=self.name,
+                model=getattr(response, "model", provider.name),
+                system_prompt=system[:8000],
+                user_prompt=user_prompt[:8000],
+                response=raw_text[:8000],
+                latency_ms=latency_ms,
+                status="success",
+            )
+            return result
+        except AIParseError as exc:
+            self._log_failure(db, ai_log_repo, system, user_prompt, raw_text, started, document_id, section_id, f"parse error: {exc}")
+            raise AIProviderError(f"{self.name} agent returned invalid output after {max_attempts} attempts") from exc
+        except AIProviderError as exc:
+            self._log_failure(db, ai_log_repo, system, user_prompt, raw_text, started, document_id, section_id, str(exc))
+            raise
 
-    @staticmethod
-    def strip_fences(text: str) -> str:
-        """Remove markdown code fences wrapping an entire response."""
-        cleaned = text.strip()
-        m = re.match(r"^```(?:markdown|md)?\s*\n(?P<body>.*?)\n?```$", cleaned, flags=re.DOTALL)
-        return m.group("body").strip() if m else cleaned
+    def _log_failure(self, db, ai_log_repo, system, user_prompt, raw_text, started, document_id, section_id, error) -> None:
+        try:
+            ai_log_repo.create_log(
+                db,
+                document_id=document_id,
+                section_id=section_id,
+                agent=self.name,
+                action=self.name,
+                model="",
+                system_prompt=system[:8000],
+                user_prompt=user_prompt[:8000],
+                response=raw_text[:8000],
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                status="error",
+                error=error[:2000],
+            )
+        except Exception:
+            pass  # logging must never mask the real error
