@@ -259,6 +259,7 @@ function DocumentRow({ doc, active }: { doc: DocumentSummary; active: boolean })
 export function ProjectsNav({ workspaceId }: { workspaceId: string }) {
   const queryClient = useQueryClient();
   const { data: projects, isLoading } = useProjects(workspaceId);
+  const [open, setOpen] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
 
@@ -274,61 +275,72 @@ export function ProjectsNav({ workspaceId }: { workspaceId: string }) {
   });
 
   return (
-    <div className="min-w-0 px-2">
+    <Collapsible open={open} onOpenChange={setOpen} className="min-w-0 px-2">
       <div className="flex items-center justify-between px-2 pb-1 pt-3">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Projects
-        </span>
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground focus-visible:outline-none transition-colors">
+            <ChevronRight
+              className={cn("h-3 w-3 shrink-0 transition-transform duration-150", open && "rotate-90")}
+            />
+            <span>Projects</span>
+          </button>
+        </CollapsibleTrigger>
         <Button
           size="icon-sm"
           variant="ghost"
           className="h-5 w-5 shrink-0"
           aria-label="New project"
-          onClick={() => setCreating((v) => !v)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+            setCreating((v) => !v);
+          }}
         >
           <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
-      {creating && (
-        <div className="flex min-w-0 items-center gap-1.5 px-2 py-1">
-          <FolderPlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <Input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && name.trim()) createProject.mutate(name.trim());
-              if (e.key === "Escape") {
-                setCreating(false);
-                setName("");
-              }
-            }}
-            onBlur={() => {
-              if (!name.trim()) setCreating(false);
-            }}
-            placeholder="Project name"
-            className="h-6 text-xs"
-            disabled={createProject.isPending}
-          />
+      <CollapsibleContent className="min-w-0">
+        {creating && (
+          <div className="flex min-w-0 items-center gap-1.5 px-2 py-1">
+            <FolderPlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && name.trim()) createProject.mutate(name.trim());
+                if (e.key === "Escape") {
+                  setCreating(false);
+                  setName("");
+                }
+              }}
+              onBlur={() => {
+                if (!name.trim()) setCreating(false);
+              }}
+              placeholder="Project name"
+              className="h-6 text-xs"
+              disabled={createProject.isPending}
+            />
+          </div>
+        )}
+        {isLoading && (
+          <div className="space-y-1.5 px-2 py-1">
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-3/4" />
+          </div>
+        )}
+        {!isLoading && (projects ?? []).length === 0 && !creating && (
+          <p className="px-2 py-1 text-[11px] text-muted-foreground">
+            No projects yet — create one to start.
+          </p>
+        )}
+        <div className="min-w-0 space-y-0.5">
+          {(projects ?? []).map((project) => (
+            <ProjectItem key={project.id} project={project} />
+          ))}
         </div>
-      )}
-      {isLoading && (
-        <div className="space-y-1.5 px-2 py-1">
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-3/4" />
-        </div>
-      )}
-      {!isLoading && (projects ?? []).length === 0 && !creating && (
-        <p className="px-2 py-1 text-[11px] text-muted-foreground">
-          No projects yet — create one to start.
-        </p>
-      )}
-      <div className="min-w-0 space-y-0.5">
-        {(projects ?? []).map((project) => (
-          <ProjectItem key={project.id} project={project} />
-        ))}
-      </div>
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -336,44 +348,52 @@ export function RecentNav({ workspaceId }: { workspaceId: string }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { documents, isLoading } = useWorkspaceDocuments(workspaceId);
+  const [open, setOpen] = useState(false);
   const recent = documents.slice(0, 5);
 
   return (
-    <div className="min-w-0 px-2">
+    <Collapsible open={open} onOpenChange={setOpen} className="min-w-0 px-2">
       <div className="px-2 pb-1 pt-3">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Recent
-        </span>
-      </div>
-      {isLoading && (
-        <div className="space-y-1.5 px-2 py-1">
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-2/3" />
-        </div>
-      )}
-      {!isLoading && recent.length === 0 && (
-        <p className="px-2 py-1 text-[11px] text-muted-foreground">Nothing opened yet.</p>
-      )}
-      <div className="min-w-0 space-y-0.5">
-        {recent.map((doc) => (
-          <button
-            key={doc.id}
-            onClick={() => navigate(`/doc/${doc.id}`)}
-            className={cn(
-              "flex min-w-0 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              location.pathname === `/doc/${doc.id}`
-                ? "bg-accent font-medium text-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
-            )}
-          >
-            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate">{doc.title}</span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">
-              {formatRelativeTime(doc.updated_at)}
-            </span>
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground focus-visible:outline-none transition-colors">
+            <ChevronRight
+              className={cn("h-3 w-3 shrink-0 transition-transform duration-150", open && "rotate-90")}
+            />
+            <span>Recent</span>
           </button>
-        ))}
+        </CollapsibleTrigger>
       </div>
-    </div>
+      <CollapsibleContent className="min-w-0">
+        {isLoading && (
+          <div className="space-y-1.5 px-2 py-1">
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-2/3" />
+          </div>
+        )}
+        {!isLoading && recent.length === 0 && (
+          <p className="px-2 py-1 text-[11px] text-muted-foreground">Nothing opened yet.</p>
+        )}
+        <div className="min-w-0 space-y-0.5">
+          {recent.map((doc) => (
+            <button
+              key={doc.id}
+              onClick={() => navigate(`/doc/${doc.id}`)}
+              className={cn(
+                "flex min-w-0 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                location.pathname === `/doc/${doc.id}`
+                  ? "bg-accent font-medium text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+              <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                {formatRelativeTime(doc.updated_at)}
+              </span>
+            </button>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

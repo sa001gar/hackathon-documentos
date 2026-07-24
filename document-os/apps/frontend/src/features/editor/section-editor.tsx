@@ -52,7 +52,9 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
       onUpdate: ({ editor: e }) => {
         const md = htmlToMarkdown(e.getHTML());
         lastContentRef.current = md;
-        saveRef.current(md);
+        if (useEditorStore.getState().autoSaveEnabled) {
+          saveRef.current(md);
+        }
       },
       onFocus: ({ editor: e }) => {
         setActiveEditor(e, section.id, section.title);

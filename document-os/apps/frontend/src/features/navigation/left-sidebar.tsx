@@ -85,9 +85,11 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
             onRetry={() => void refetch()}
           />
         ) : workspace ? (
-          <div className="pb-3">
+          <div className="flex min-h-full flex-col justify-between pb-3">
             <ProjectsNav workspaceId={workspace.id} />
-            <RecentNav workspaceId={workspace.id} />
+            <div className="mt-auto pt-2 border-t border-border/40">
+              <RecentNav workspaceId={workspace.id} />
+            </div>
           </div>
         ) : (
           !isLoading && (

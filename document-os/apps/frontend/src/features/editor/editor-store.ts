@@ -17,6 +17,8 @@ interface SectionSaveInfo {
  * Document-generation pipeline state lives in ./generation-store.
  */
 interface EditorUiState {
+  autoSaveEnabled: boolean;
+  setAutoSaveEnabled: (enabled: boolean) => void;
   generateOpen: boolean;
   setGenerateOpen: (open: boolean) => void;
   scrollTarget: string | null;
@@ -49,6 +51,8 @@ interface EditorUiState {
 }
 
 export const useEditorStore = create<EditorUiState>()((set) => ({
+  autoSaveEnabled: true,
+  setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
   generateOpen: false,
   setGenerateOpen: (generateOpen) => set({ generateOpen }),
   scrollTarget: null,

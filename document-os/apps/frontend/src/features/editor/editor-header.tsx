@@ -1,14 +1,13 @@
-import type { DocumentDetail } from "@documentos/shared-types";
-import { formatRelativeTime } from "@documentos/utils";
+import type { DocumentDetail, DocumentStatus } from "@documentos/shared-types";
+import { cn } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowLeft,
   Check,
-  ClipboardCheck,
+  ChevronDown,
   Loader2,
   PanelRight,
-  ShieldCheck,
   WifiOff,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -16,7 +15,13 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { DocumentStatusBadge } from "@/components/status";
 import { Button } from "@/components/ui/button";
-import { PencilSparkles } from "@/components/ui/pencil-sparkles";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOnline } from "@/hooks/use-online";
 import { ApiClientError, documentApi } from "@/lib/api-client";
@@ -71,8 +76,70 @@ function TitleInput({ doc }: { doc: DocumentDetail }) {
   );
 }
 
-function SaveIndicator() {
+function StatusSelector({ doc }: { doc: DocumentDetail }) {
+  const queryClient = useQueryClient();
+  const commitStatus = useMutation({
+    mutationFn: (nextStatus: DocumentStatus) => documentApi.update(doc.id, { status: nextStatus }),
+    onMutate: async (nextStatus: DocumentStatus) => {
+      await queryClient.cancelQueries({ queryKey: ["document", doc.id] });
+      const previous = queryClient.getQueryData<DocumentDetail>(["document", doc.id]);
+      queryClient.setQueryData<DocumentDetail>(["document", doc.id], (old) =>
+        old ? { ...old, status: nextStatus } : old,
+      );
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["document", doc.id], context.previous);
+      }
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to update status");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["document", doc.id] });
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+
+  const statuses: { value: DocumentStatus; label: string }[] = [
+    { value: "draft", label: "Draft" },
+    { value: "reviewed", label: "Reviewed" },
+    { value: "validated", label: "Validated" },
+    { value: "exported", label: "Exported" },
+  ];
+
+  const currentLabel = statuses.find((s) => s.value === doc.status)?.label ?? "Draft";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="group flex shrink-0 items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm hover:bg-accent transition-colors focus:outline-none"
+        >
+          <span className="capitalize">{currentLabel}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:text-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-36 text-xs">
+        {statuses.map(({ value, label }) => (
+          <DropdownMenuItem
+            key={value}
+            onClick={() => commitStatus.mutate(value)}
+            className="flex cursor-pointer items-center justify-between font-medium"
+          >
+            <span>{label}</span>
+            {doc.status === value && <Check className="h-3.5 w-3.5 text-[#5551FF]" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SaveController() {
   const saveStates = useEditorStore((s) => s.saveStates);
+  const autoSaveEnabled = useEditorStore((s) => s.autoSaveEnabled);
+  const setAutoSaveEnabled = useEditorStore((s) => s.setAutoSaveEnabled);
   const online = useOnline();
 
   const aggregate = useMemo(() => {
@@ -87,57 +154,59 @@ function SaveIndicator() {
     return "idle" as const;
   }, [saveStates]);
 
-  if (!online || aggregate === "offline") {
-    return (
-      <span className="flex shrink-0 items-center gap-1.5 text-xs text-amber-500">
-        <WifiOff className="h-3.5 w-3.5" />
-        Offline
-      </span>
-    );
-  }
-  if (aggregate === "saving") {
-    return (
-      <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Saving…
-      </span>
-    );
-  }
-  if (aggregate === "error") {
-    return (
-      <span className="flex shrink-0 items-center gap-1.5 text-xs text-destructive">
-        <AlertCircle className="h-3.5 w-3.5" />
-        Save failed
-      </span>
-    );
-  }
-  if (typeof aggregate === "object") {
-    return (
-      <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <Check className="h-3.5 w-3.5 text-emerald-500" />
-        Saved · {formatRelativeTime(new Date(aggregate.at).toISOString())}
-      </span>
-    );
-  }
   return (
-    <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/60">
-      <Check className="h-3.5 w-3.5" />
-      Idle
-    </span>
+    <div className="flex items-center gap-2.5 shrink-0">
+      <div className="flex shrink-0 items-center gap-2 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium shadow-sm">
+        <Switch
+          id="auto-save-toggle"
+          checked={autoSaveEnabled}
+          onCheckedChange={(checked) => {
+            setAutoSaveEnabled(checked);
+            toast.info(checked ? "Auto-save enabled" : "Auto-save disabled");
+          }}
+          className="h-4 w-7 data-[state=checked]:bg-[#5551FF]"
+        />
+        <label
+          htmlFor="auto-save-toggle"
+          className="cursor-pointer text-xs font-semibold text-foreground select-none whitespace-nowrap shrink-0 hover:text-foreground"
+        >
+          Auto-save
+        </label>
+      </div>
+
+      {!online || aggregate === "offline" ? (
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+          <WifiOff className="h-3.5 w-3.5" />
+          Offline
+        </span>
+      ) : aggregate === "saving" ? (
+        <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-[#5551FF]">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Saving…
+        </span>
+      ) : aggregate === "error" ? (
+        <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-destructive">
+          <AlertCircle className="h-3.5 w-3.5" />
+          Save error
+        </span>
+      ) : typeof aggregate === "object" ? (
+        <span className="hidden sm:flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+          <Check className="h-3.5 w-3.5 text-emerald-500" />
+          Saved
+        </span>
+      ) : null}
+    </div>
   );
 }
 
 export function EditorHeader({ doc }: { doc: DocumentDetail }) {
   const navigate = useNavigate();
-  const requestValidate = useEditorStore((s) => s.requestValidate);
-  const requestReview = useEditorStore((s) => s.requestReview);
-  const setGenerateOpen = useEditorStore((s) => s.setGenerateOpen);
   const rightCollapsed = useUiStore((s) => s.rightCollapsed);
   const setRightCollapsed = useUiStore((s) => s.setRightCollapsed);
 
   return (
-    <div className="flex h-[52px] items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-3 backdrop-blur-sm">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex h-[52px] items-center justify-between gap-3 border-b border-indigo-200/50 dark:border-indigo-900/40 bg-white/80 dark:bg-zinc-900/80 px-3 backdrop-blur-md">
+      <div className="flex min-w-0 items-center gap-2.5">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button size="icon-sm" variant="ghost" aria-label="Back to dashboard" onClick={() => navigate("/")}>
@@ -151,50 +220,21 @@ export function EditorHeader({ doc }: { doc: DocumentDetail }) {
           <TitleInput doc={doc} />
         </div>
 
-        <DocumentStatusBadge status={doc.status} className="hidden shrink-0 sm:inline-flex" />
-        <SaveIndicator />
+        <StatusSelector doc={doc} />
+        <SaveController />
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
-        <span className="hidden rounded bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground/80 md:inline-block">
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="hidden rounded-lg border border-indigo-100 dark:border-indigo-950 bg-indigo-50/50 dark:bg-indigo-950/30 px-2.5 py-1 text-xs font-medium text-muted-foreground/90 md:inline-block">
           {doc.word_count.toLocaleString()} words
         </span>
-        <span className="hidden rounded bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground/80 lg:inline-block">
+        <span className="hidden rounded-lg border border-indigo-100 dark:border-indigo-950 bg-indigo-50/50 dark:bg-indigo-950/30 px-2.5 py-1 text-xs font-medium text-muted-foreground/90 lg:inline-block">
           {Math.max(1, Math.ceil(doc.word_count / 200))} min read
         </span>
 
         <div className="mx-1 h-4 w-px bg-border/60" aria-hidden />
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2.5 text-xs" onClick={requestValidate}>
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-              <span className="hidden lg:inline">Validate</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Run structural validation</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button size="sm" variant="ghost" className="h-8 gap-1.5 px-2.5 text-xs" onClick={requestReview}>
-              <ClipboardCheck className="h-3.5 w-3.5 text-indigo-500" />
-              <span className="hidden lg:inline">Review</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Run AI quality review</TooltipContent>
-        </Tooltip>
-
         <ExportMenu documentId={doc.id} title={doc.title} />
-
-        <Button
-          size="sm"
-          className="h-8 gap-1.5 px-3.5 text-xs font-semibold bg-[#5551FF] hover:bg-[#4540FF] text-white shadow-md shadow-[#5551FF]/25 rounded-xl transition-all active:scale-95"
-          onClick={() => setGenerateOpen(true)}
-        >
-          <PencilSparkles className="h-3.5 w-3.5" />
-          Generate
-        </Button>
 
         <Tooltip>
           <TooltipTrigger asChild>
