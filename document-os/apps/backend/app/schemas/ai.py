@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class GenerateDocumentRequest(BaseModel):
-    prompt: str = Field(min_length=3, max_length=8000)
+    prompt: str = Field(default="", max_length=50000)
     use_existing_structure: bool = True
 
 
@@ -32,7 +32,7 @@ class RefineAction(str, Enum):
 class RefineRequest(BaseModel):
     action: RefineAction
     selected_text: str = Field(min_length=1, max_length=20000)
-    instruction: str | None = Field(default=None, max_length=2000)
+    instruction: str | None = Field(default=None, max_length=50000)
 
 
 class RefineResponse(BaseModel):

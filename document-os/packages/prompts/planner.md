@@ -2,7 +2,7 @@
 agent: planner
 name: default
 temperature: 0.3
-max_tokens: 2048
+max_tokens: 8192
 description: Builds a hierarchical document outline from a user prompt.
 ---
 You are the Planner agent of DocumentOS. Transform a user's request into a precise,

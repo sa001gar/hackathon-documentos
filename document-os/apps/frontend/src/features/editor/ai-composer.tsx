@@ -12,9 +12,10 @@ import {
   Maximize2,
   MessagesSquare,
   Minus,
+  Pencil,
   Play,
+  RotateCcw,
   SendHorizonal,
-  Sparkles,
   Square,
   X,
   XCircle,
@@ -161,19 +162,13 @@ function GenerationStrip() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {total > 0 && (
-            <span className="rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground border border-border/40">
-              {completed}/{total} {failed > 0 && <span className="text-destructive">({failed} failed)</span>}
-            </span>
-          )}
-
           {active && (
             <button
               type="button"
               onClick={cancel}
-              className="flex items-center gap-1 rounded-lg border border-border/60 bg-background/90 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground shadow-xs"
+              className="flex items-center gap-1 rounded-lg border border-border/80 bg-background px-2 py-0.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
             >
-              <Square className="h-3 w-3" />
+              <Square className="h-3 w-3 fill-current" />
               Stop
             </button>
           )}
@@ -182,7 +177,7 @@ function GenerationStrip() {
             <button
               type="button"
               onClick={() => void resume()}
-              className="flex items-center gap-1 rounded-lg bg-[#5551FF] px-2.5 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-90 shadow-xs"
+              className="flex items-center gap-1 rounded-lg bg-[#5551FF] px-2.5 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-90 cursor-pointer shadow-xs"
             >
               <Play className="h-3 w-3 fill-current" />
               Resume
@@ -194,7 +189,7 @@ function GenerationStrip() {
               type="button"
               onClick={reset}
               aria-label="Dismiss"
-              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -205,8 +200,13 @@ function GenerationStrip() {
   );
 }
 
+interface ThreadPanelProps {
+  onEdit: (text: string) => void;
+  onRetry: (text: string) => void;
+}
+
 /** Conversation thread panel — expands smoothly above the composer dock. */
-function ThreadPanel() {
+function ThreadPanel({ onEdit, onRetry }: ThreadPanelProps) {
   const thread = useComposerStore((s) => s.thread);
   const open = useComposerStore((s) => s.threadOpen);
   const setOpen = useComposerStore((s) => s.setThreadOpen);
@@ -219,13 +219,15 @@ function ThreadPanel() {
 
   if (thread.length === 0) return null;
 
+  const lastUserPrompt = [...thread].reverse().find((m) => m.role === "user")?.text;
+
   return (
     <div className="mb-2.5 overflow-hidden rounded-2xl border-2 border-[#5551FF]/40 bg-background/95 shadow-xl shadow-[#5551FF]/15 backdrop-blur-2xl dark:border-[#5551FF]/60 dark:bg-zinc-900/95">
       <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 text-xs font-medium text-muted-foreground">
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-2 font-semibold text-[#5551FF] hover:opacity-80 transition-opacity"
+          className="flex items-center gap-2 font-semibold text-[#5551FF] hover:opacity-80 transition-opacity cursor-pointer"
         >
           <MessagesSquare className="h-3.5 w-3.5" />
           <span>AI Conversation Thread ({thread.length})</span>
@@ -235,7 +237,7 @@ function ThreadPanel() {
         <button
           type="button"
           onClick={clearThread}
-          className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
+          className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
         >
           Clear thread
         </button>
@@ -247,25 +249,84 @@ function ThreadPanel() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="max-h-60 space-y-2.5 overflow-y-auto p-3 text-xs"
+            className="max-h-64 space-y-2.5 overflow-y-auto p-3 text-xs"
           >
-            {thread.map((msg) => (
-              <div
-                key={msg.id}
-                className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}
-              >
+            {thread.map((msg) => {
+              const isError =
+                msg.role === "ai" &&
+                (msg.text.toLowerCase().includes("failed") ||
+                  msg.text.toLowerCase().includes("error") ||
+                  msg.text.includes("422"));
+
+              return (
                 <div
+                  key={msg.id}
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-3.5 py-2 leading-relaxed shadow-xs",
-                    msg.role === "user"
-                      ? "bg-[#5551FF] text-white font-medium shadow-md shadow-[#5551FF]/20"
-                      : "bg-indigo-50/90 text-foreground border border-indigo-100/80 dark:bg-zinc-800/90 dark:border-zinc-700/50",
+                    "group relative flex flex-col gap-1",
+                    msg.role === "user" ? "items-end" : "items-start",
                   )}
                 >
-                  {msg.text}
+                  <div
+                    className={cn(
+                      "relative max-w-[85%] rounded-2xl px-3.5 py-2 leading-relaxed shadow-xs transition-all",
+                      msg.role === "user"
+                        ? "bg-[#5551FF] text-white font-medium shadow-md shadow-[#5551FF]/20"
+                        : isError
+                        ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-medium"
+                        : "bg-indigo-50/90 text-foreground border border-indigo-100/80 dark:bg-zinc-800/90 dark:border-zinc-700/50",
+                    )}
+                  >
+                    <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+
+                    {/* Controls for User messages */}
+                    {msg.role === "user" && (
+                      <div className="mt-1 flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => onEdit(msg.text)}
+                          className="flex items-center gap-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-white/30 transition-colors cursor-pointer"
+                          title="Edit prompt in composer"
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onRetry(msg.text)}
+                          className="flex items-center gap-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-white/30 transition-colors cursor-pointer"
+                          title="Retry prompt"
+                        >
+                          <RotateCcw className="h-2.5 w-2.5" />
+                          <span>Retry</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Action controls for Error messages */}
+                    {isError && lastUserPrompt && (
+                      <div className="mt-2 flex items-center gap-2 border-t border-rose-500/20 pt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onRetry(lastUserPrompt)}
+                          className="flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white shadow-xs hover:bg-rose-700 transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          <span>Retry Request</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onEdit(lastUserPrompt)}
+                          className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-background/80 px-2.5 py-1 text-[11px] font-semibold text-rose-700 dark:text-rose-300 hover:bg-accent transition-colors cursor-pointer"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          <span>Edit Prompt</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div ref={endRef} />
           </motion.div>
         )}
@@ -406,8 +467,8 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [prompt]);
 
-  const submit = () => {
-    const text = prompt.trim();
+  const submit = (textOverride?: string) => {
+    const text = (textOverride ?? prompt).trim();
     if (!text || running || sectionAction.isPending) return;
 
     if (tab === "review") {
@@ -428,6 +489,18 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
       }
     }
     void start(doc.id, text, doc.section_count > 0);
+  };
+
+  const handleEditPrompt = (text: string) => {
+    setPrompt(text);
+    setMinimized(false);
+    textareaRef.current?.focus();
+    toast.info("Prompt loaded into composer for editing");
+  };
+
+  const handleRetryPrompt = (text: string) => {
+    setMinimized(false);
+    submit(text);
   };
 
   const busy = running || review.isPending || sectionAction.isPending;
@@ -473,7 +546,7 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
         animate={{ y: 0, opacity: 1 }}
         className="pointer-events-auto w-full max-w-2xl cursor-default"
       >
-        <ThreadPanel />
+        <ThreadPanel onEdit={handleEditPrompt} onRetry={handleRetryPrompt} />
 
         {/* Floating Command Dock Card with Crisp Uniform Single-Color Outline */}
         <div className="relative overflow-hidden rounded-2xl border-2 border-[#5551FF]/50 dark:border-[#5551FF]/70 bg-background/95 dark:bg-zinc-950/95 p-3.5 shadow-[0_20px_60px_-10px_rgba(85,81,255,0.3)] dark:shadow-[0_20px_60px_-10px_rgba(85,81,255,0.35)] backdrop-blur-2xl transition-all duration-300">
@@ -596,7 +669,7 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
 
             <button
               type="button"
-              onClick={submit}
+              onClick={() => submit()}
               disabled={!canSubmit}
               aria-label="Send"
               className={cn(

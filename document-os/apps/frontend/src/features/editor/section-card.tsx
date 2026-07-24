@@ -1,11 +1,10 @@
 import type { DocumentDetail, SectionNode } from "@documentos/shared-types";
 import { cn } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, History, Plus, Trash2 } from "lucide-react";
+import { AlignLeft, Check, ChevronDown, Copy, FileText, History, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { PencilSparkles } from "@/components/ui/pencil-sparkles";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PencilSparkles } from "@/components/ui/pencil-sparkles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSectionStream } from "@/hooks/use-sse-stream";
 import { ApiClientError, sectionApi } from "@/lib/api-client";
@@ -104,6 +110,66 @@ function SectionTitle({ node, documentId, depth }: { node: SectionNode; document
       )}
       placeholder="Untitled section"
     />
+  );
+}
+
+function markdownToPlainText(md: string): string {
+  return md
+    .replace(/^#+\s+/gm, "")
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")
+    .replace(/(\*|_)(.*?)\1/g, "$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/```[\s\S]*?```/g, (match) => match.replace(/```[a-z]*/g, ""))
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/<[^>]*>/g, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .trim();
+}
+
+function CopySectionMenu({ node }: { node: SectionNode }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyMarkdown = () => {
+    const md = `# ${node.title}\n\n${node.content}`;
+    void navigator.clipboard.writeText(md);
+    setCopied(true);
+    toast.success(`Copied "${node.title}" as Markdown`);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const copyPlainText = () => {
+    const plain = `${node.title}\n\n${markdownToPlainText(node.content)}`;
+    void navigator.clipboard.writeText(plain);
+    setCopied(true);
+    toast.success(`Copied "${node.title}" as Plain Text`);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon-sm" variant="ghost" aria-label="Copy section content">
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">Copy section content</TooltipContent>
+      </Tooltip>
+
+      <DropdownMenuContent align="end" className="w-48 text-xs rounded-xl p-1 shadow-xl z-[110]">
+        <DropdownMenuItem onClick={copyMarkdown} className="flex cursor-pointer items-center gap-2 rounded-lg font-medium">
+          <FileText className="h-3.5 w-3.5 text-[#5551FF]" />
+          <span>Copy as Markdown</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={copyPlainText} className="flex cursor-pointer items-center gap-2 rounded-lg font-medium">
+          <AlignLeft className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>Copy as Plain Text</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -291,6 +357,7 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
             ) : null}
           </span>
           <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+            <CopySectionMenu node={node} />
             {actions.map(({ icon: Icon, label, onClick, disabled }) => (
               <Tooltip key={label}>
                 <TooltipTrigger asChild>
