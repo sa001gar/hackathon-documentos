@@ -1,8 +1,33 @@
-import { Sparkles } from "lucide-react";
-import { memo, useMemo } from "react";
+import katex from "katex";
+import { Loader2, Sparkles } from "lucide-react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import { countWords, markdownToHtmlFast } from "@/lib/markdown";
+
+/**
+ * Shared rendered-prose container. After innerHTML is set, math spans
+ * (`<span data-math data-tex>` produced by the markdown pipeline) are
+ * rendered with KaTeX — the same rendering the editor's MathNode produces,
+ * so streaming and post-save content look identical.
+ */
+function Prose({ html }: { html: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    ref.current?.querySelectorAll("span[data-math]").forEach((el) => {
+      const tex = el.getAttribute("data-tex") ?? "";
+      const display = el.getAttribute("data-display") === "block";
+      try {
+        katex.render(tex, el as HTMLElement, { displayMode: display, throwOnError: false });
+      } catch {
+        // Leave the raw TeX source visible if KaTeX can't parse it.
+      }
+    });
+  }, [html]);
+
+  return <div ref={ref} className="docos-prose" dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 /**
  * Progressively-rendered streamed markdown with typewriter pacing.
@@ -25,7 +50,7 @@ export const StreamedMarkdown = memo(function StreamedMarkdown({
   }
   return (
     <span className="relative">
-      <span className="docos-prose" dangerouslySetInnerHTML={{ __html: html }} />
+      <Prose html={html} />
       {showCaret && (
         <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse rounded-[1px] bg-primary/70 align-text-bottom" />
       )}
@@ -33,42 +58,33 @@ export const StreamedMarkdown = memo(function StreamedMarkdown({
   );
 });
 
-/** Live word count for streamed text (typewriter-paced). */
-export function useStreamWordCount(tokens: string): number {
-  const typed = useTypewriter(tokens);
-  return useMemo(() => countWords(typed), [typed]);
-}
-
 /**
  * In-place streaming view shown inside a section card while the document
- * pipeline writes that section.
+ * pipeline writes that section. Rendered like normal document prose (no box)
+ * so the text appears to write itself directly into the document.
  */
 export function StreamingBody({ tokens }: { tokens: string }) {
   const typed = useTypewriter(tokens);
   const html = useMemo(() => markdownToHtmlFast(typed), [typed]);
-  const words = useMemo(() => countWords(typed), [typed]);
 
   return (
-    <div className="rounded-lg border border-primary/25 bg-primary/[0.03] px-4 py-3 transition-colors">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-[11px] font-medium text-primary">
-          <Sparkles className="h-3 w-3 animate-pulse" />
+    <div className="relative my-3 flex flex-col overflow-hidden rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-white/95 dark:bg-zinc-950/95 p-4 shadow-sm shadow-indigo-500/5 backdrop-blur-xl">
+      <div className="mb-3 flex items-center justify-between border-b border-indigo-100/80 dark:border-indigo-950/80 pb-2.5">
+        <span className="flex items-center gap-2 text-xs font-semibold text-[#5551FF] dark:text-indigo-400">
+          <Loader2 className="h-4 w-4 animate-spin text-[#5551FF]" />
           AI is writing…
-        </span>
-        <span className="text-[10px] tabular-nums text-muted-foreground">
-          {words.toLocaleString()} words
         </span>
       </div>
       {typed ? (
-        <div className="relative">
-          <div className="docos-prose" dangerouslySetInnerHTML={{ __html: html }} />
-          <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse rounded-[1px] bg-primary/70 align-text-bottom" />
+        <div className="relative py-1">
+          <Prose html={html} />
+          <span className="ml-0.5 inline-block h-3.5 w-[7px] animate-pulse rounded-[1px] bg-[#5551FF] align-text-bottom" />
         </div>
       ) : (
         <div className="space-y-2 py-1">
-          <Skeleton className="h-3 w-11/12" />
-          <Skeleton className="h-3 w-4/5" />
-          <p className="text-xs text-muted-foreground">Waiting for the first tokens…</p>
+          <Skeleton className="h-3.5 w-11/12" />
+          <Skeleton className="h-3.5 w-4/5" />
+          <Skeleton className="h-3.5 w-3/5" />
         </div>
       )}
     </div>
@@ -78,7 +94,7 @@ export function StreamingBody({ tokens }: { tokens: string }) {
 /** Placeholder skeleton for sections queued in the current generation run. */
 export function QueuedBody() {
   return (
-    <div className="space-y-2 rounded-lg border border-dashed border-border/70 px-4 py-3">
+    <div className="space-y-2 px-1 py-2 opacity-70">
       <Skeleton className="h-3 w-11/12" />
       <Skeleton className="h-3 w-4/5" />
       <Skeleton className="h-3 w-3/5" />

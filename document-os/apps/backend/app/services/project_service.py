@@ -35,4 +35,5 @@ def update(db: Session, project: Project, data: ProjectUpdate) -> Project:
 
 def delete(db: Session, project: Project) -> None:
     """Delete a project (documents cascade)."""
-    project_repo.remove(db, id=project.id)
+    db.delete(project)
+    db.commit()

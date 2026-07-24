@@ -7,6 +7,10 @@ marked.setOptions({ gfm: true, breaks: false });
 /** Pre-process markdown so constructs TipTap doesn't natively know survive the round-trip. */
 function preprocessMarkdown(md: string): string {
   // Inline/block math: $...$ / $$...$$ → spans our math extension understands.
+  // The TeX source is ALSO included as text content: turndown drops empty
+  // inline elements as "blank", and keeping the source visible is a safe
+  // fallback if any consumer skips the math rule. MathNode ignores the
+  // content on parse (atom) and re-serializes the same shape.
   // Avoid touching code fences.
   const lines = md.split("\n");
   let inFence = false;
@@ -17,14 +21,18 @@ function preprocessMarkdown(md: string): string {
     }
     if (inFence) return line;
     return line
-      .replace(/\$\$([^$]+)\$\$/g, (_m, tex: string) => `<span data-math data-display="block" data-tex="${escapeAttr(tex)}"></span>`)
-      .replace(/\$([^$\n]+)\$/g, (_m, tex: string) => `<span data-math data-tex="${escapeAttr(tex)}"></span>`);
+      .replace(/\$\$([^$]+)\$\$/g, (_m, tex: string) => `<span data-math data-display="block" data-tex="${escapeAttr(tex)}">${escapeHtml(tex)}</span>`)
+      .replace(/\$([^$\n]+)\$/g, (_m, tex: string) => `<span data-math data-tex="${escapeAttr(tex)}">${escapeHtml(tex)}</span>`);
   });
   return out.join("\n");
 }
 
 function escapeAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**
@@ -54,13 +62,14 @@ export function markdownToHtml(markdown: string): string {
 }
 
 /**
- * Lightweight markdown → HTML for live streaming previews. Skips the
- * math/task-list post-processing (DOMParser) so it stays cheap enough to run
- * on every animation frame.
+ * Lightweight markdown → HTML for live streaming previews. Uses the SAME
+ * marked parser + math preprocessing as the full pipeline (so streaming and
+ * editor agree), skipping only the task-list DOMParser upgrade — math spans
+ * are rendered to KaTeX by the preview component.
  */
 export function markdownToHtmlFast(markdown: string): string {
   if (!markdown.trim()) return "";
-  const html = marked.parse(markdown, { async: false });
+  const html = marked.parse(preprocessMarkdown(markdown), { async: false });
   return typeof html === "string" ? html : "";
 }
 
@@ -77,6 +86,7 @@ export function htmlToMarkdown(html: string): string {
     codeBlockStyle: "fenced",
     bulletListMarker: "-",
     emDelimiter: "*",
+    hr: "---",
   });
   td.use(gfm);
 

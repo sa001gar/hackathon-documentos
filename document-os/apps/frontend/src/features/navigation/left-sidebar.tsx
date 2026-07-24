@@ -22,8 +22,8 @@ export function LeftSidebar({ onCollapse }: { onCollapse?: () => void }) {
   const { workspace, data: workspaces, isLoading, isError, refetch } = useCurrentWorkspace();
 
   return (
-    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-card/40">
-      <div className="flex h-[52px] items-center gap-1 border-b border-border/60 bg-background/80 px-2 backdrop-blur-sm">
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-gradient-to-b from-slate-50/90 via-indigo-50/30 to-white/90 dark:from-zinc-950/90 dark:via-indigo-950/20 dark:to-zinc-950/90 border-r border-indigo-200/60 dark:border-indigo-900/50 shadow-xs">
+      <div className="flex h-[52px] items-center gap-1 border-b border-indigo-200/50 dark:border-indigo-900/40 bg-white/70 dark:bg-zinc-900/70 px-2 backdrop-blur-md">
         <div className="min-w-0 flex-1">
           {isLoading ? (
             <Skeleton className="h-8 w-full" />

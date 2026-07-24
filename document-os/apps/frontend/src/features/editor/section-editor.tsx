@@ -27,6 +27,7 @@ interface SectionEditorProps {
  */
 export function SectionEditor({ section, documentId, autosaveInterval }: SectionEditorProps) {
   const reportSaveState = useEditorStore((s) => s.reportSaveState);
+  const setActiveEditor = useEditorStore((s) => s.setActiveEditor);
   const { state: saveState, save, lastSavedAt } = useAutosave(section.id, documentId, autosaveInterval);
 
   const extensions = useMemo(() => createSectionExtensions(), []);
@@ -53,6 +54,9 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
         lastContentRef.current = md;
         saveRef.current(md);
       },
+      onFocus: ({ editor: e }) => {
+        setActiveEditor(e, section.id, section.title);
+      },
     },
     [section.id],
   );
@@ -67,10 +71,10 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
   // saves never echo back into the editor.
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    if (section.content === lastContentRef.current) return;
+    if (section.content === lastContentRef.current && section.content === htmlToMarkdown(editor.getHTML())) return;
     lastContentRef.current = section.content;
     editor.commands.setContent(markdownToHtml(section.content), false);
-  }, [section.content, editor]);
+  }, [section.content, section.updated_at, editor]);
 
   // Offer to recover an offline draft that never reached the server.
   useEffect(() => {
@@ -122,7 +126,7 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
           </Button>
         </div>
       )}
-      <EditorContent editor={editor} />
+      <EditorContent editor={editor} className="docos-editor" />
       {editor && !editor.isDestroyed && (
         <AiToolbar editor={editor} sectionId={section.id} onApplied={persistNow} />
       )}

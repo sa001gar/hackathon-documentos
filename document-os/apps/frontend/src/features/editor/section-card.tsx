@@ -1,11 +1,11 @@
 import type { DocumentDetail, SectionNode } from "@documentos/shared-types";
 import { cn } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, GripVertical, History, Plus, Sparkles, Trash2, WandSparkles } from "lucide-react";
+import { ChevronDown, History, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { SectionStatusChip } from "@/components/status";
 import { Button } from "@/components/ui/button";
+import { PencilSparkles } from "@/components/ui/pencil-sparkles";
 import {
   Dialog,
   DialogContent,
@@ -48,7 +48,7 @@ function patchSection(
   );
 }
 
-function SectionTitle({ node, documentId }: { node: SectionNode; documentId: string }) {
+function SectionTitle({ node, documentId, depth }: { node: SectionNode; documentId: string; depth: number }) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState(node.title);
   const [editing, setEditing] = useState(false);
@@ -59,12 +59,21 @@ function SectionTitle({ node, documentId }: { node: SectionNode; documentId: str
 
   const commit = useMutation({
     mutationFn: (next: string) => sectionApi.update(node.id, { title: next }),
-    onSuccess: (updated) => {
-      patchSection(queryClient, documentId, node.id, { title: updated.title });
+    onMutate: async (next) => {
+      await queryClient.cancelQueries({ queryKey: ["document", documentId] });
+      const previous = queryClient.getQueryData<DocumentDetail>(["document", documentId]);
+      patchSection(queryClient, documentId, node.id, { title: next });
+      return { previous };
     },
-    onError: (err) => {
+    onError: (err, _next, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["document", documentId], context.previous);
+      }
       setTitle(node.title);
       toast.error(err instanceof ApiClientError ? err.message : "Failed to rename section");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["document", documentId] });
     },
   });
 
@@ -87,7 +96,13 @@ function SectionTitle({ node, documentId }: { node: SectionNode; documentId: str
         }
       }}
       aria-label="Section title"
-      className="min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 text-[14px] font-medium outline-none transition-colors hover:bg-accent/60 focus:bg-accent focus:ring-1 focus:ring-ring"
+      className={cn(
+        "min-w-0 flex-1 rounded bg-transparent py-0.5 outline-none transition-colors placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60",
+        depth === 0 && "text-[17px] font-semibold tracking-tight",
+        depth === 1 && "text-[15px] font-semibold",
+        depth >= 2 && "text-[14px] font-medium",
+      )}
+      placeholder="Untitled section"
     />
   );
 }
@@ -143,27 +158,72 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
         parent_id: node.id,
         order_index: node.children.length,
       }),
-    onSuccess: () => {
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["document", documentId] });
+      const previous = queryClient.getQueryData<DocumentDetail>(["document", documentId]);
+      const tempId = `temp-${Date.now()}`;
+      const newSection: SectionNode = {
+        id: tempId,
+        document_id: documentId,
+        parent_id: node.id,
+        title: "Untitled section",
+        content: "",
+        order_index: node.children.length,
+        status: "draft",
+        word_count: 0,
+        ai_prompt: null,
+        metadata: {},
+        children: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      queryClient.setQueryData<DocumentDetail>(["document", documentId], (old) =>
+        old ? { ...old, sections: [...old.sections, newSection] } : old,
+      );
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["document", documentId], context.previous);
+      }
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to add section");
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["document", documentId] });
     },
-    onError: (err) =>
-      toast.error(err instanceof ApiClientError ? err.message : "Failed to add section"),
   });
 
   const remove = useMutation({
     mutationFn: () => sectionApi.remove(node.id),
-    onSuccess: () => {
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["document", documentId] });
+      const previous = queryClient.getQueryData<DocumentDetail>(["document", documentId]);
+      queryClient.setQueryData<DocumentDetail>(["document", documentId], (old) =>
+        old
+          ? {
+              ...old,
+              sections: old.sections.filter((s) => s.id !== node.id && s.parent_id !== node.id),
+            }
+          : old,
+      );
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["document", documentId], context.previous);
+      }
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to delete section");
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ["document", documentId] });
       void queryClient.invalidateQueries({ queryKey: ["documents"] });
       toast.success("Section deleted");
     },
-    onError: (err) =>
-      toast.error(err instanceof ApiClientError ? err.message : "Failed to delete section"),
   });
 
-  const actions: { icon: typeof WandSparkles; label: string; onClick: () => void; disabled?: boolean }[] = [
+  const actions: { icon: typeof PencilSparkles; label: string; onClick: () => void; disabled?: boolean }[] = [
     {
-      icon: WandSparkles,
+      icon: PencilSparkles,
       label: "Generate with AI",
       onClick: () => {
         if (node.content.trim()) setConfirmOverwrite(true);
@@ -180,51 +240,56 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
     <div id={`section-${node.id}`} className="scroll-mt-20">
       <div
         className={cn(
-          "group rounded-xl border border-border/80 bg-card shadow-sm transition-all duration-200 hover:border-border hover:shadow-md",
-          (node.status === "error" || pipelineFailed) && "border-destructive/40",
-          (stream.streaming || pipelineStreaming) && "border-primary/40 shadow-md ring-1 ring-primary/10",
-          queued && "opacity-80",
+          "group relative transition-all duration-150",
+          depth > 0
+            ? "my-2.5 rounded-xl border border-indigo-100/90 dark:border-indigo-950/80 bg-gradient-to-r from-[#F8FAFC]/90 via-[#F1F5F9]/40 to-white dark:from-zinc-900/50 dark:via-zinc-900/30 dark:to-zinc-950/50 p-3 sm:p-4 shadow-sm shadow-indigo-500/5 hover:border-indigo-200 dark:hover:border-indigo-900/70"
+            : "rounded-lg py-1",
+          pipelineStreaming && "bg-indigo-50/40 dark:bg-indigo-950/30",
         )}
       >
-        <div className="flex items-center gap-1 px-2 pt-1.5">
-          <GripVertical
-            className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/40"
-            aria-hidden
-          />
+        {/* Title row */}
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setCollapsed((v) => !v)}
             aria-label={collapsed ? "Expand section" : "Collapse section"}
-            className="rounded p-0.5 text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="rounded p-1 text-muted-foreground/60 hover:bg-indigo-100/60 dark:hover:bg-indigo-950/60 hover:text-foreground focus-visible:outline-none transition-colors shrink-0"
           >
             <ChevronDown
-              className={cn("h-3.5 w-3.5 transition-transform", collapsed && "-rotate-90")}
+              className={cn("h-4 w-4 transition-transform duration-150", collapsed && "-rotate-90")}
             />
           </button>
-          <SectionTitle node={node} documentId={documentId} />
+
+          {depth > 0 && (
+            <span className="h-1.5 w-1.5 rounded-full bg-[#5551FF]/60 shrink-0" aria-hidden />
+          )}
+
+          <SectionTitle node={node} documentId={documentId} depth={depth} />
           <span
             className={cn(
-              "hidden shrink-0 text-[11px] tabular-nums text-muted-foreground/70 sm:inline",
+              "hidden shrink-0 text-[11px] tabular-nums text-muted-foreground/50 sm:inline",
               liveWords !== null && "font-medium text-primary",
             )}
           >
             {(liveWords ?? node.word_count).toLocaleString()} words
           </span>
-          {queued ? (
-            <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
-              queued
-            </span>
-          ) : (
-            <SectionStatusChip
-              status={
-                stream.streaming || pipelineStreaming
-                  ? "generating"
-                  : pipelineFailed
-                    ? "error"
-                    : node.status
-              }
-            />
-          )}
+          <span className="flex shrink-0 items-center gap-1.5">
+            {queued ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+                queued
+              </span>
+            ) : pipelineStreaming || stream.streaming ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                writing
+              </span>
+            ) : pipelineFailed ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                failed
+              </span>
+            ) : null}
+          </span>
           <div className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
             {actions.map(({ icon: Icon, label, onClick, disabled }) => (
               <Tooltip key={label}>
@@ -244,8 +309,10 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
             ))}
           </div>
         </div>
+
+        {/* Body */}
         {!collapsed && (
-          <div className="relative px-3 pb-2 pt-1">
+          <div className="relative mt-1 pl-6">
             {pipelineStreaming ? (
               <StreamingBody tokens={genSection?.tokens ?? ""} />
             ) : queued ? (
@@ -258,19 +325,17 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
         )}
       </div>
 
-      {node.children.length > 0 && (
-        <div className="ml-5 border-l border-border/50 pl-4 pt-3">
-          <div className="space-y-3">
-            {node.children.map((child) => (
-              <SectionCard
-                key={child.id}
-                node={child}
-                depth={depth + 1}
-                documentId={documentId}
-                autosaveInterval={autosaveInterval}
-              />
-            ))}
-          </div>
+      {node.children.length > 0 && !collapsed && (
+        <div className="ml-3 sm:ml-4 mt-2.5 space-y-3 border-l-2 border-indigo-200/60 dark:border-indigo-900/50 pl-3 sm:pl-4">
+          {node.children.map((child) => (
+            <SectionCard
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              documentId={documentId}
+              autosaveInterval={autosaveInterval}
+            />
+          ))}
         </div>
       )}
 
@@ -293,7 +358,7 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
                 beginStream();
               }}
             >
-              <WandSparkles className="h-4 w-4" />
+              <PencilSparkles className="h-4 w-4" />
               Generate
             </Button>
           </DialogFooter>

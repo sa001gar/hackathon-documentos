@@ -55,7 +55,7 @@ export function useAutosave(sectionId: string, documentId: string, intervalMs = 
         // Sync the section inside the cached document without a refetch.
         queryClient.setQueryData<{ sections?: Section[] }>(["document", documentId], (old) =>
           old?.sections
-            ? { ...old, sections: old.sections.map((s) => (s.id === sectionId ? { ...s, ...updated, content: s.content } : s)) }
+            ? { ...old, sections: old.sections.map((s) => (s.id === sectionId ? { ...s, ...updated } : s)) }
             : old,
         );
       } catch (err) {

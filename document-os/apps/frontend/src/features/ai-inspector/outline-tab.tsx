@@ -69,8 +69,8 @@ export function OutlineTab({ documentId }: { documentId: string }) {
                 onClick={() => setScrollTarget(node.id)}
                 style={{ paddingLeft: 8 + depth * 14 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[13px] transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                  isCurrent && "bg-primary/10 hover:bg-primary/15",
+                  "flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[13px] transition-all hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                  isCurrent && "bg-[#5551FF]/10 text-[#5551FF] font-semibold border-l-2 border-[#5551FF] rounded-r-lg shadow-sm",
                 )}
               >
                 {genStatus === "completed" ? (
@@ -97,7 +97,7 @@ export function OutlineTab({ documentId }: { documentId: string }) {
                 <span
                   className={cn(
                     "min-w-0 flex-1 truncate",
-                    isCurrent && "font-medium text-primary",
+                    isCurrent && "font-semibold text-[#5551FF]",
                   )}
                 >
                   {node.title}

@@ -9,7 +9,6 @@ import {
   Loader2,
   PanelRight,
   ShieldCheck,
-  WandSparkles,
   WifiOff,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -17,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { DocumentStatusBadge } from "@/components/status";
 import { Button } from "@/components/ui/button";
+import { PencilSparkles } from "@/components/ui/pencil-sparkles";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOnline } from "@/hooks/use-online";
 import { ApiClientError, documentApi } from "@/lib/api-client";
@@ -159,6 +159,9 @@ export function EditorHeader({ doc }: { doc: DocumentDetail }) {
         <span className="hidden rounded bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground/80 md:inline-block">
           {doc.word_count.toLocaleString()} words
         </span>
+        <span className="hidden rounded bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground/80 lg:inline-block">
+          {Math.max(1, Math.ceil(doc.word_count / 200))} min read
+        </span>
 
         <div className="mx-1 h-4 w-px bg-border/60" aria-hidden />
 
@@ -186,10 +189,10 @@ export function EditorHeader({ doc }: { doc: DocumentDetail }) {
 
         <Button
           size="sm"
-          className="h-8 gap-1.5 px-3 text-xs font-medium"
+          className="h-8 gap-1.5 px-3.5 text-xs font-semibold bg-[#5551FF] hover:bg-[#4540FF] text-white shadow-md shadow-[#5551FF]/25 rounded-xl transition-all active:scale-95"
           onClick={() => setGenerateOpen(true)}
         >
-          <WandSparkles className="h-3.5 w-3.5" />
+          <PencilSparkles className="h-3.5 w-3.5" />
           Generate
         </Button>
 

@@ -111,15 +111,12 @@ export function VersionsPanel() {
         old
           ? {
               ...old,
-              sections: old.sections.map((s) =>
-                s.id === section.id
-                  ? { ...s, content: section.content, word_count: section.word_count, status: section.status }
-                  : s,
-              ),
+              sections: old.sections.map((s) => (s.id === section.id ? { ...s, ...section } : s)),
             }
           : old,
       );
       void queryClient.invalidateQueries({ queryKey: ["versions", sectionId] });
+      void queryClient.invalidateQueries({ queryKey: ["document", documentId] });
       toast.success("Version restored");
     },
     onError: (err) => toast.error(err instanceof ApiClientError ? err.message : "Restore failed"),

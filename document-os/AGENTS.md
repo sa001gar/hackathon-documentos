@@ -19,7 +19,9 @@ the contract both sides implement. `packages/shared-types` mirrors it for TypeSc
 
 - Backend: `cd apps/backend && uv sync && uv run pytest -q && uv run uvicorn app.main:app --reload`
 - Seed: `uv run python -m app.seed` (demo@documentos.ai / demo1234)
-- Frontend: `pnpm install && pnpm --filter @documentos/frontend dev` (build gate: `... build`)
+- Frontend: `pnpm install && pnpm --filter @documentos/frontend dev` (build gate: `... build`;
+  unit tests: `pnpm --filter @documentos/frontend test` — vitest+jsdom, covers the markdown
+  round-trip contract in `src/lib/markdown.test.ts`)
 
 ## Rules
 

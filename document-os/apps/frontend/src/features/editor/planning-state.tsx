@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { PencilSparkles } from "@/components/ui/pencil-sparkles";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -15,7 +15,7 @@ export function PlanningState() {
       className="rounded-xl border border-dashed border-primary/30 bg-primary/[0.03] p-6"
     >
       <div className="flex items-center gap-2 text-sm font-medium text-primary">
-        <Sparkles className="h-4 w-4 animate-pulse" />
+        <PencilSparkles className="h-4 w-4 animate-pulse" />
         Planning your document outline…
       </div>
       <p className="mt-1 text-xs text-muted-foreground">

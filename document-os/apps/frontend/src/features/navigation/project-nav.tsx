@@ -1,13 +1,19 @@
 import type { DocumentSummary, Project } from "@documentos/shared-types";
 import { cn, formatRelativeTime } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, FileText, FolderPlus, Plus } from "lucide-react";
+import { ChevronRight, FileText, FolderPlus, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { StatusDot, DOCUMENT_DOT_COLORS } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiClientError, documentApi, projectApi } from "@/lib/api-client";
@@ -26,12 +32,42 @@ function ProjectItem({ project }: { project: Project }) {
     mutationFn: (title: string) => documentApi.create(project.id, { title }),
     onSuccess: (doc) => {
       void queryClient.invalidateQueries({ queryKey: ["documents", project.id] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace-documents"] });
       setDocTitle("");
       setCreatingDoc(false);
       navigate(`/doc/${doc.id}`);
     },
     onError: (err) =>
       toast.error(err instanceof ApiClientError ? err.message : "Failed to create document"),
+  });
+
+  const deleteProject = useMutation({
+    mutationFn: () => projectApi.remove(project.id),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["projects", project.workspace_id] });
+
+      const previousProjects = queryClient.getQueryData<Project[]>(["projects", project.workspace_id]);
+
+      if (previousProjects) {
+        queryClient.setQueryData<Project[]>(
+          ["projects", project.workspace_id],
+          previousProjects.filter((p) => p.id !== project.id),
+        );
+      }
+
+      toast.success(`Project "${project.name}" deleted`);
+      return { previousProjects };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previousProjects) {
+        queryClient.setQueryData(["projects", project.workspace_id], context.previousProjects);
+      }
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to delete project");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects", project.workspace_id] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace-documents"] });
+    },
   });
 
   const submitDoc = () => {
@@ -54,21 +90,50 @@ function ProjectItem({ project }: { project: Project }) {
               className="h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: project.color || "#6366f1" }}
             />
-            <span className="min-w-0 flex-1 truncate">{project.name}</span>
+            <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">{project.name}</span>
           </button>
         </CollapsibleTrigger>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100"
-          aria-label={`New document in ${project.name}`}
-          onClick={() => {
-            setOpen(true);
-            setCreatingDoc(true);
-          }}
-        >
-          <Plus className="h-3 w-3" />
-        </Button>
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="h-5 w-5 shrink-0"
+            aria-label={`New document in ${project.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(true);
+              setCreatingDoc(true);
+            }}
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className="h-5 w-5 shrink-0"
+                aria-label={`Options for ${project.name}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36 text-xs">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteProject.mutate();
+                }}
+                className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Project
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       <CollapsibleContent className="min-w-0 w-full">
         <div className="ml-[18px] min-w-0 border-l border-border/60 pl-1.5">
@@ -114,17 +179,80 @@ function ProjectItem({ project }: { project: Project }) {
 
 function DocumentRow({ doc, active }: { doc: DocumentSummary; active: boolean }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+
+  const deleteDoc = useMutation({
+    mutationFn: () => documentApi.remove(doc.id),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["documents", doc.project_id] });
+
+      const previousDocs = queryClient.getQueryData<DocumentSummary[]>(["documents", doc.project_id]);
+
+      if (previousDocs) {
+        queryClient.setQueryData<DocumentSummary[]>(
+          ["documents", doc.project_id],
+          previousDocs.filter((d) => d.id !== doc.id),
+        );
+      }
+
+      toast.success("Document deleted");
+      if (location.pathname === `/doc/${doc.id}`) {
+        navigate("/");
+      }
+
+      return { previousDocs };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previousDocs) {
+        queryClient.setQueryData(["documents", doc.project_id], context.previousDocs);
+      }
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to delete document");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["documents", doc.project_id] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace-documents"] });
+    },
+  });
+
   return (
-    <button
+    <div
       onClick={() => navigate(`/doc/${doc.id}`)}
       className={cn(
-        "flex min-w-0 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        "group/doc flex min-w-0 w-full items-center justify-between gap-1 rounded-md px-2 py-1 text-left text-[13px] cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring transition-colors",
         active ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
-      <StatusDot status={doc.status} map={DOCUMENT_DOT_COLORS} className="h-1.5 w-1.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{doc.title}</span>
-    </button>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <StatusDot status={doc.status} map={DOCUMENT_DOT_COLORS} className="h-1.5 w-1.5 shrink-0" />
+        <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+      </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            onClick={(e) => e.stopPropagation()}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity group-hover/doc:opacity-100 hover:bg-accent-foreground/10 hover:text-foreground"
+            aria-label="Document options"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-32 text-xs">
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteDoc.mutate();
+            }}
+            className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 

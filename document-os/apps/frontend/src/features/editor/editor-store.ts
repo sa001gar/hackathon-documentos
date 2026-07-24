@@ -1,8 +1,9 @@
 import type { ReviewReport, ValidationReport } from "@documentos/shared-types";
+import type { Editor } from "@tiptap/core";
 import { create } from "zustand";
 import type { SaveState } from "@/hooks/use-autosave";
 
-export type InspectorTab = "outline" | "validate" | "review" | "activity";
+export type InspectorTab = "outline" | "agents" | "validate" | "review" | "activity";
 export type EditorAction = "export";
 
 interface SectionSaveInfo {
@@ -34,6 +35,13 @@ interface EditorUiState {
   saveStates: Record<string, SectionSaveInfo>;
   reportSaveState: (sectionId: string, state: SaveState, savedAt: number | null) => void;
   resetSaveStates: () => void;
+  /** Last focused TipTap instance — the top formatting toolbar targets it. */
+  activeEditor: Editor | null;
+  activeSectionId: string | null;
+  activeSectionTitle: string | null;
+  setActiveEditor: (editor: Editor | null, sectionId?: string, sectionTitle?: string) => void;
+  /** Clear the section context chip (composer ✕, document switch). */
+  clearSectionContext: () => void;
   validations: Record<string, ValidationReport>;
   setValidation: (documentId: string, report: ValidationReport) => void;
   reviews: Record<string, ReviewReport>;
@@ -61,6 +69,17 @@ export const useEditorStore = create<EditorUiState>()((set) => ({
   reportSaveState: (sectionId, state, savedAt) =>
     set((s) => ({ saveStates: { ...s.saveStates, [sectionId]: { state, savedAt } } })),
   resetSaveStates: () => set({ saveStates: {} }),
+  activeEditor: null,
+  activeSectionId: null,
+  activeSectionTitle: null,
+  setActiveEditor: (activeEditor, sectionId, sectionTitle) =>
+    set({
+      activeEditor,
+      activeSectionId: sectionId ?? null,
+      activeSectionTitle: sectionTitle ?? null,
+    }),
+  clearSectionContext: () =>
+    set({ activeEditor: null, activeSectionId: null, activeSectionTitle: null }),
   validations: {},
   setValidation: (documentId, report) =>
     set((s) => ({ validations: { ...s.validations, [documentId]: report } })),

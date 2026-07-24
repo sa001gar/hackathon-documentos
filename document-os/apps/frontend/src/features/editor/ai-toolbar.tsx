@@ -16,24 +16,24 @@ import {
   Scale,
   Scissors,
   Wand2,
-  WandSparkles,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PencilSparkles } from "@/components/ui/pencil-sparkles";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ApiClientError, aiApi } from "@/lib/api-client";
 
 interface ToolbarAction {
   action: RefineAction;
   label: string;
-  icon: typeof WandSparkles;
+  icon: typeof PencilSparkles;
 }
 
 const ACTION_GROUPS: ToolbarAction[][] = [
   [
-    { action: "improve", label: "Improve", icon: WandSparkles },
+    { action: "improve", label: "Improve", icon: PencilSparkles },
     { action: "rewrite", label: "Rewrite", icon: PenLine },
     { action: "expand", label: "Expand", icon: ArrowUpWideNarrow },
     { action: "shorten", label: "Shorten", icon: ArrowDownWideNarrow },

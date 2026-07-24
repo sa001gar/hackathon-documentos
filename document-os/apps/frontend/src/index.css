@@ -61,7 +61,7 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-gradient-to-br from-[#FAFCFF] via-[#F4F7FC] to-[#EEF4FF] dark:from-[#090D16] dark:via-[#0E1322] dark:to-[#131A2D] text-foreground antialiased;
     font-feature-settings: "cv11", "ss01";
   }
 
@@ -88,37 +88,165 @@
 }
 
 @layer components {
-  /* TipTap editor canvas */
-  .docos-editor .ProseMirror {
-    @apply outline-none min-h-full;
+  /* ------------------------------------------------------------------
+   * ONE typography system shared by the editor canvas AND the streaming
+   * preview. Rules are defined once; selectors are grouped so both
+   * containers render identically (streaming == editing == reloaded).
+   * ------------------------------------------------------------------ */
+  .docos-prose,
+  .docos-editor,
+  .ProseMirror {
+    @apply text-[14.5px] leading-[1.8] text-foreground/85 outline-none min-h-full max-w-none;
+  }
+  .docos-prose > *:first-child,
+  .docos-editor > *:first-child,
+  .ProseMirror > *:first-child {
+    margin-top: 0;
+  }
+  .docos-prose h1,
+  .docos-editor h1,
+  .ProseMirror h1 {
+    @apply mb-3.5 mt-7 text-[23px] font-bold tracking-tight text-foreground/95;
+  }
+  .docos-prose h2,
+  .docos-editor h2,
+  .ProseMirror h2 {
+    @apply mb-3 mt-6 text-[18.5px] font-semibold tracking-tight text-foreground/95;
+  }
+  .docos-prose h3,
+  .docos-editor h3,
+  .ProseMirror h3 {
+    @apply mb-2.5 mt-5 text-[16px] font-semibold text-foreground/90;
+  }
+  .docos-prose h4,
+  .docos-editor h4,
+  .ProseMirror h4 {
+    @apply mb-2 mt-4 text-[14px] font-semibold text-foreground/90;
+  }
+  .docos-prose p,
+  .docos-editor p,
+  .ProseMirror p {
+    @apply my-3.5 text-[14.5px] leading-[1.8] text-foreground/85;
+  }
+  .docos-prose strong,
+  .docos-editor strong,
+  .ProseMirror strong {
+    @apply font-semibold text-foreground;
+  }
+  .docos-prose ul,
+  .docos-prose ol,
+  .docos-editor ul,
+  .docos-editor ol,
+  .ProseMirror ul,
+  .ProseMirror ol {
+    @apply my-3.5 space-y-2 pl-6 text-[14.5px] leading-[1.75];
+  }
+  .docos-prose ul,
+  .docos-editor ul,
+  .ProseMirror ul {
+    @apply list-disc;
+  }
+  .docos-prose ol,
+  .docos-editor ol,
+  .ProseMirror ol {
+    @apply list-decimal;
+  }
+  .docos-prose li::marker,
+  .docos-editor li::marker,
+  .ProseMirror li::marker {
+    @apply text-muted-foreground/80;
+  }
+  .docos-prose blockquote,
+  .docos-editor blockquote,
+  .ProseMirror blockquote {
+    @apply my-5 rounded-r-xl border-l-4 border-[#5551FF] bg-[#5551FF]/[0.05] py-2.5 pl-4 pr-3.5 italic text-foreground/85 shadow-sm;
+  }
+  .docos-prose code:not(pre code),
+  .docos-editor code:not(pre code),
+  .ProseMirror code:not(pre code) {
+    @apply rounded-md border border-indigo-200/70 dark:border-indigo-900/50 bg-indigo-50/60 dark:bg-indigo-950/40 px-1.5 py-0.5 font-mono text-[12.5px] text-[#5551FF] dark:text-indigo-300;
+  }
+  .docos-prose pre,
+  .docos-editor pre,
+  .ProseMirror pre {
+    @apply my-5 overflow-x-auto rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 bg-slate-950 p-4 font-mono text-[13px] leading-relaxed text-slate-100 shadow-sm;
+  }
+  .docos-prose pre code,
+  .docos-editor pre code,
+  .ProseMirror pre code {
+    @apply bg-transparent p-0 text-inherit border-0;
+  }
+  .docos-editor .tableWrapper {
+    @apply my-3 w-full max-w-full overflow-x-auto rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 shadow-sm bg-white/70 dark:bg-zinc-900/50 backdrop-blur-sm;
+  }
+  .docos-prose table {
+    @apply my-3 block w-full max-w-full overflow-x-auto border-collapse rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 text-[13px] shadow-sm bg-white/70 dark:bg-zinc-900/50 backdrop-blur-sm;
+  }
+  .docos-editor table,
+  .ProseMirror table {
+    @apply my-3 w-full min-w-full border-collapse text-[13px];
+  }
+  .docos-editor .tableWrapper table {
+    @apply my-0 border-0 shadow-none bg-transparent rounded-none block min-w-full;
+  }
+  .docos-prose thead th,
+  .docos-prose th,
+  .docos-editor thead th,
+  .docos-editor th,
+  .ProseMirror thead th,
+  .ProseMirror th {
+    @apply border border-indigo-200/60 dark:border-indigo-900/50 bg-indigo-50/70 dark:bg-indigo-950/40 px-4 py-2.5 text-left font-semibold text-foreground align-top tracking-tight text-[13.5px];
+  }
+  .docos-prose tbody td,
+  .docos-prose td,
+  .docos-editor tbody td,
+  .docos-editor td,
+  .ProseMirror tbody td,
+  .ProseMirror td {
+    @apply border border-indigo-200/50 dark:border-indigo-900/40 px-4 py-2.5 align-top text-foreground/90 leading-relaxed text-[13.5px];
+  }
+  .docos-prose table p,
+  .docos-editor table p,
+  .ProseMirror table p {
+    @apply my-0.5 py-0 text-[13.5px] leading-relaxed;
+  }
+  .docos-prose tr:nth-child(even),
+  .docos-prose tbody tr:nth-child(even),
+  .docos-editor tr:nth-child(even),
+  .docos-editor tbody tr:nth-child(even),
+  .ProseMirror tr:nth-child(even),
+  .ProseMirror tbody tr:nth-child(even) {
+    @apply bg-indigo-50/20 dark:bg-indigo-950/15;
+  }
+  .docos-prose hr,
+  .docos-editor hr,
+  .ProseMirror hr {
+    @apply my-6 border-border/70;
+  }
+  .docos-prose a,
+  .docos-editor a,
+  .ProseMirror a {
+    @apply text-primary underline underline-offset-2;
+  }
+  .docos-prose img,
+  .docos-editor img,
+  .ProseMirror img {
+    @apply rounded-lg border border-border;
+  }
+  .docos-prose input[type="checkbox"],
+  .docos-editor input[type="checkbox"],
+  .ProseMirror input[type="checkbox"] {
+    @apply mr-1.5 align-middle;
   }
 
-  .docos-editor .ProseMirror p.is-editor-empty:first-child::before {
+  /* ---- Editor-only behaviors (not part of shared typography) ---- */
+  .docos-editor p.is-editor-empty:first-child::before,
+  .ProseMirror p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
     @apply text-muted-foreground float-left h-0 pointer-events-none;
   }
 
-  .docos-editor .ProseMirror {
-    @apply prose prose-zinc dark:prose-invert max-w-none;
-  }
-
-  /* Code blocks */
-  .docos-editor pre {
-    @apply rounded-lg border border-border bg-zinc-950 text-zinc-100 text-sm font-mono;
-  }
-  .dark .docos-editor pre {
-    @apply bg-zinc-900;
-  }
-  .docos-editor code {
-    @apply font-mono;
-  }
-
-  /* Mermaid diagram blocks */
-  .docos-mermaid {
-    @apply my-4 flex justify-center rounded-lg border border-border bg-card p-4 overflow-x-auto;
-  }
-
-  /* Task lists */
+  /* Task lists: paragraphs inside items must not add vertical rhythm */
   .docos-editor ul[data-type="taskList"] {
     @apply list-none pl-0;
   }
@@ -128,84 +256,18 @@
   .docos-editor ul[data-type="taskList"] li > label {
     @apply mt-1;
   }
+  .docos-editor .ProseMirror li > p,
+  .docos-prose li > p {
+    @apply my-0;
+  }
+
+  /* Mermaid diagram blocks */
+  .docos-mermaid {
+    @apply my-4 flex justify-center rounded-lg border border-border bg-card p-4 overflow-x-auto;
+  }
 
   /* Slash-command + bubble menu z-order safety */
   .tippy-box {
     @apply z-50;
-  }
-
-  /* ---- Streaming / preview prose (premium document typography) ---- */
-  .docos-prose {
-    @apply text-[14px] leading-[1.75] text-foreground/90;
-  }
-  .docos-prose > *:first-child {
-    margin-top: 0;
-  }
-  .docos-prose h1 {
-    @apply mb-3 mt-6 text-[22px] font-semibold tracking-tight text-foreground;
-  }
-  .docos-prose h2 {
-    @apply mb-2.5 mt-6 text-[18px] font-semibold tracking-tight text-foreground;
-  }
-  .docos-prose h3 {
-    @apply mb-2 mt-5 text-[15.5px] font-semibold text-foreground;
-  }
-  .docos-prose h4 {
-    @apply mb-2 mt-4 text-[14px] font-semibold text-foreground;
-  }
-  .docos-prose p {
-    @apply my-3;
-  }
-  .docos-prose strong {
-    @apply font-semibold text-foreground;
-  }
-  .docos-prose ul,
-  .docos-prose ol {
-    @apply my-3 space-y-1.5 pl-6;
-  }
-  .docos-prose ul {
-    @apply list-disc;
-  }
-  .docos-prose ol {
-    @apply list-decimal;
-  }
-  .docos-prose li::marker {
-    @apply text-muted-foreground;
-  }
-  .docos-prose blockquote {
-    @apply my-4 rounded-r-md border-l-[3px] border-primary/40 bg-primary/[0.05] py-1.5 pl-4 pr-3 italic text-foreground/80;
-  }
-  .docos-prose code:not(pre code) {
-    @apply rounded-md border border-border/60 bg-muted/60 px-1.5 py-0.5 font-mono text-[12.5px] text-foreground;
-  }
-  .docos-prose pre {
-    @apply my-4 overflow-x-auto rounded-lg border border-border bg-zinc-950 p-4 font-mono text-[13px] leading-relaxed text-zinc-100;
-  }
-  .docos-prose pre code {
-    @apply bg-transparent p-0 text-inherit;
-  }
-  .docos-prose table {
-    @apply my-4 w-full border-collapse overflow-hidden rounded-lg text-[13px];
-  }
-  .docos-prose thead th {
-    @apply border border-border bg-muted/70 px-3 py-2 text-left font-semibold text-foreground;
-  }
-  .docos-prose tbody td {
-    @apply border border-border px-3 py-2 align-top;
-  }
-  .docos-prose tbody tr:nth-child(even) {
-    @apply bg-muted/30;
-  }
-  .docos-prose hr {
-    @apply my-6 border-border/70;
-  }
-  .docos-prose a {
-    @apply text-primary underline underline-offset-2;
-  }
-  .docos-prose img {
-    @apply rounded-lg border border-border;
-  }
-  .docos-prose input[type="checkbox"] {
-    @apply mr-1.5 align-middle;
   }
 }

@@ -93,7 +93,8 @@ def update(db: Session, document: Document, data: DocumentUpdate) -> Document:
 
 def delete(db: Session, document: Document) -> None:
     """Delete a document (sections/versions/exports cascade)."""
-    document_repo.remove(db, id=document.id)
+    db.delete(document)
+    db.commit()
 
 
 def full_markdown(db: Session, document_id: str) -> str:

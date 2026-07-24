@@ -1,7 +1,7 @@
 import type { DocumentDetail } from "@documentos/shared-types";
-import { WandSparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PencilSparkles } from "@/components/ui/pencil-sparkles";
 import {
   Dialog,
   DialogContent,
@@ -54,7 +54,7 @@ export function GenerateDialog({ document: doc }: GenerateDialogProps) {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <WandSparkles className="h-4 w-4 text-primary" />
+            <PencilSparkles className="h-4 w-4 text-primary" />
             Generate with AI
           </DialogTitle>
           <DialogDescription>
@@ -96,7 +96,7 @@ export function GenerateDialog({ document: doc }: GenerateDialogProps) {
             Cancel
           </Button>
           <Button onClick={launch} disabled={!prompt.trim() || running}>
-            <WandSparkles className="h-4 w-4" />
+            <PencilSparkles className="h-4 w-4" />
             Generate
           </Button>
         </DialogFooter>

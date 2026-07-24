@@ -12,10 +12,11 @@ import { useDocumentTree } from "@/hooks/use-document-tree";
 import { ApiClientError, documentApi, sectionApi, usersApi } from "@/lib/api-client";
 import { useUiStore } from "@/lib/ui-store";
 import { VersionsPanel } from "@/features/versions/versions-panel";
+import { AiComposer } from "./ai-composer";
 import { EditorHeader } from "./editor-header";
+import { EditorToolbar } from "./editor-toolbar";
 import { useEditorStore } from "./editor-store";
 import { GenerateDialog } from "./generate-dialog";
-import { GenerationProgress } from "./generation-progress";
 import { PlanningState } from "./planning-state";
 import { useGenerationStore } from "./generation-store";
 import { useExportDocument } from "./export-menu";
@@ -70,12 +71,14 @@ export function EditorPage() {
   const currentSectionId = useGenerationStore((s) =>
     s.documentId === documentId ? s.currentSectionId : null,
   );
+  const clearSectionContext = useEditorStore((s) => s.clearSectionContext);
   const prevGenPhase = useRef<string>("idle");
 
   useEffect(() => {
     if (documentId) setLastDocumentId(documentId);
     resetSaveStates();
-  }, [documentId, setLastDocumentId, resetSaveStates]);
+    clearSectionContext();
+  }, [documentId, setLastDocumentId, resetSaveStates, clearSectionContext]);
 
   // Toast on generation completion/failure (only while this doc is open).
   useEffect(() => {
@@ -161,14 +164,15 @@ export function EditorPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <EditorHeader doc={doc} />
+      <EditorToolbar />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.2 }}
-          className="mx-auto max-w-3xl px-6 py-6"
+          className="mx-auto max-w-4xl px-4 sm:px-6 pb-44 pt-6"
         >
           {(genPhase === "connecting" || genPhase === "planning") && <PlanningState />}
           {flat.length === 0 ? (
@@ -196,7 +200,7 @@ export function EditorPage() {
               </div>
             )
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-8">
               {tree.map((node) => (
                 <SectionCard
                   key={node.id}
@@ -206,11 +210,11 @@ export function EditorPage() {
                   autosaveInterval={autosaveInterval}
                 />
               ))}
-              <div className="flex justify-center pt-2">
+              <div className="flex justify-start pt-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground"
+                  className="text-muted-foreground/70 hover:text-muted-foreground"
                   onClick={() => addRootSection.mutate()}
                   disabled={addRootSection.isPending}
                 >
@@ -220,9 +224,9 @@ export function EditorPage() {
               </div>
             </div>
           )}
-          <GenerationProgress documentId={doc.id} />
         </motion.div>
       </div>
+      <AiComposer doc={doc} />
       <GenerateDialog document={doc} />
       <VersionsPanel />
     </div>
