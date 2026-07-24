@@ -1,4 +1,4 @@
-import type { DocumentDetail, RefineAction } from "@documentos/shared-types";
+import type { DocumentDetail, RefineAction, Section } from "@documentos/shared-types";
 import { cn } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence, useDragControls, type PanInfo } from "framer-motion";
@@ -28,7 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { aiApi, ApiClientError } from "@/lib/api-client";
+import { aiApi, ApiClientError, sectionApi } from "@/lib/api-client";
 import { useComposerStore } from "./composer-store";
 import { useEditorStore } from "./editor-store";
 import { useGenerationStore, type GenPhase } from "./generation-store";
@@ -467,7 +467,113 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [prompt]);
 
-  const submit = (textOverride?: string) => {
+  const parseSectionUpdatePrompt = (text: string) => {
+    const promptLower = text.toLowerCase();
+
+    // Find target section by title matching across all sections in the document
+    let targetSection: Section | null = null;
+    for (const s of doc.sections) {
+      const titleLower = s.title.toLowerCase();
+      if (titleLower.length > 2 && promptLower.includes(titleLower)) {
+        targetSection = s;
+        break;
+      }
+    }
+
+    // Fallback to currently focused activeSectionId if no specific title was matched
+    if (!targetSection && activeSectionId) {
+      targetSection = doc.sections.find((s) => s.id === activeSectionId) ?? null;
+    }
+
+    // Extract inline markdown content if provided (e.g. after "with this", "with:", or starting with "#")
+    let inlineContent: string | null = null;
+    const matchWith = text.match(/(?:with (?:this|the following|content)?[:\s\n]*)([\s\S]+)/i);
+    if (matchWith && matchWith[1].trim().length > 0) {
+      inlineContent = matchWith[1].trim();
+    } else if (text.includes("# ") || text.includes("\n#")) {
+      const hashIndex = text.indexOf("# ");
+      if (hashIndex !== -1) {
+        inlineContent = text.slice(hashIndex).trim();
+      }
+    }
+
+    return { targetSection, inlineContent };
+  };
+
+  const streamSectionTokens = async (
+    sectionId: string,
+    sectionTitle: string,
+    fullText: string,
+    onComplete?: () => void,
+  ) => {
+    useGenerationStore.setState((s) => ({
+      ...s,
+      phase: "generating",
+      documentId: doc.id,
+      currentSectionId: sectionId,
+      totalSections: 1,
+      completedCount: 0,
+      sections: [{ id: sectionId, title: sectionTitle, status: "generating", tokens: "" }],
+      statusBySection: { ...s.statusBySection, [sectionId]: "generating" },
+    }));
+
+    const chunkSize = Math.max(6, Math.floor(fullText.length / 45));
+    let cursor = 0;
+
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        cursor = Math.min(fullText.length, cursor + chunkSize);
+        const currentTokens = fullText.slice(0, cursor);
+
+        useGenerationStore.setState((s) => ({
+          ...s,
+          sections: s.sections.map((sec) =>
+            sec.id === sectionId ? { ...sec, tokens: currentTokens } : sec,
+          ),
+        }));
+
+        if (cursor >= fullText.length) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 28);
+    });
+
+    useGenerationStore.setState((s) => ({
+      ...s,
+      phase: "completed",
+      completedCount: 1,
+      sections: s.sections.map((sec) =>
+        sec.id === sectionId ? { ...sec, status: "completed", tokens: fullText } : sec,
+      ),
+      statusBySection: { ...s.statusBySection, [sectionId]: "completed" },
+    }));
+
+    try {
+      const updatedSec = await sectionApi.putContent(sectionId, {
+        content: fullText,
+        source: "ai",
+        change_summary: "AI prompt update",
+      });
+      queryClient.setQueryData<DocumentDetail>(["document", doc.id], (old) =>
+        old
+          ? {
+              ...old,
+              sections: old.sections.map((s) => (s.id === sectionId ? { ...s, ...updatedSec } : s)),
+            }
+          : old,
+      );
+    } catch (e) {
+      console.error("Section update failed", e);
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ["document", doc.id] });
+    void queryClient.invalidateQueries({ queryKey: ["documents"] });
+
+    onComplete?.();
+  };
+
+  const submit = async (textOverride?: string) => {
     const text = (textOverride ?? prompt).trim();
     if (!text || running || sectionAction.isPending) return;
 
@@ -481,13 +587,49 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
 
     setPrompt("");
     push("user", text);
-    if (activeSectionId) {
-      const action = detectSectionAction(text);
-      if (action) {
-        sectionAction.mutate({ action, text });
+
+    const { targetSection, inlineContent } = parseSectionUpdatePrompt(text);
+
+    if (targetSection) {
+      const el = document.getElementById(`section-${targetSection.id}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      if (inlineContent) {
+        push("ai", `Updating section "${targetSection.title}" with typewriter streaming…`);
+        await streamSectionTokens(targetSection.id, targetSection.title, inlineContent, () => {
+          push("ai", `Section "${targetSection.title}" updated.`);
+        });
         return;
       }
+
+      const action = detectSectionAction(text) ?? "rewrite";
+      push("ai", `Refining section "${targetSection.title}" (${action})…`);
+
+      try {
+        let refinedText = "";
+        if (action === "regenerate") {
+          const res = await aiApi.generateSection(targetSection.id, text);
+          refinedText = res.content;
+        } else {
+          const res = await aiApi.refine(targetSection.id, {
+            action,
+            selected_text: targetSection.content,
+            instruction: text,
+          });
+          refinedText = res.refined_text;
+        }
+
+        await streamSectionTokens(targetSection.id, targetSection.title, refinedText, () => {
+          push("ai", `Section "${targetSection.title}" updated.`);
+        });
+      } catch (err) {
+        const msg = err instanceof ApiClientError ? err.message : "Section update failed";
+        push("ai", `Error updating section: ${msg}`);
+        toast.error(msg);
+      }
+      return;
     }
+
     void start(doc.id, text, doc.section_count > 0);
   };
 
