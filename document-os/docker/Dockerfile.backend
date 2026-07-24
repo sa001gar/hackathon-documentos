@@ -20,18 +20,23 @@ FROM python:3.12-slim-bookworm
 RUN groupadd --system --gid 1001 app && \
     useradd --system --uid 1001 --gid app --create-home app
 
-WORKDIR /app
+# WORKDIR must be /app/apps/backend so that `import app` resolves —
+# the `app` package lives at apps/backend/app/ and Python finds it
+# as a subdirectory of the current working directory.
+WORKDIR /app/apps/backend
 
-# Copy virtual environment from builder (created at apps/backend/.venv by uv sync)
-COPY --from=builder /app/apps/backend/.venv /app/.venv
-
-# Copy application code
+# Copy application code + venv (the .venv/ was created by uv sync in the builder)
 COPY --from=builder /app/apps/backend /app/apps/backend
+
 COPY --from=builder /app/packages/prompts /app/packages/prompts
+
+# Pre-create export/data directories so the non-root app user owns them
+# (Docker volumes inherit these permissions on first mount).
+RUN mkdir -p /app/exports /app/data && chown -R app:app /app/exports /app/data
 
 ENV \
     # Prepend venv to PATH so `uvicorn` etc. are available
-    PATH="/app/.venv/bin:$PATH" \
+    PATH="/app/apps/backend/.venv/bin:$PATH" \
     # Python: unbuffered stdout/stderr for Docker logging
     PYTHONUNBUFFERED=1 \
     # Python: don't write .pyc files (read-only container)

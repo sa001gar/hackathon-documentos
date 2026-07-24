@@ -26,6 +26,7 @@ apps/backend/exports/
 # Env / editors
 .env
 .env.local
+.env.production
 .env.example
 .idea/
 .vscode/
