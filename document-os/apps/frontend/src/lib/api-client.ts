@@ -23,7 +23,8 @@ import type {
 } from "@documentos/shared-types";
 import { useAuthStore } from "./auth-store";
 
-const BASE = "/api/v1";
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? "";
+const BASE = API_ORIGIN ? `${API_ORIGIN}/api/v1` : "/api/v1";
 
 export class ApiClientError extends Error {
   code: string;

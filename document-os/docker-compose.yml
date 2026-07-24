@@ -1,9 +1,25 @@
-# DocumentOS — application stack only (backend + frontend), Dokploy-ready.
-# No local Postgres/Redis/nginx: external services via env, Traefik does routing.
-# Dokploy → Environment:
-#   DATABASE_URL=postgresql+psycopg2://user:pass@host:5432/documentos   (managed Postgres)
-#   GEMINI_API_KEY=...  (hosted Gemma 4)   JWT_SECRET=<long-random>
-#   REDIS_URL=redis://host:6379/0   (optional — job runner is in-process; reserved)
+# DocumentOS — production-ready Docker Compose for Dokploy.
+#
+# Architecture:
+#   Browser → Traefik (Dokploy) → frontend:3000  (docos.sagarkundu.me)
+#   Browser → Traefik (Dokploy) → backend:8000   (docos-api.sagarkundu.me)
+#   Backend → existing PostgreSQL (managed outside compose)
+#
+# No nginx, no Caddy, no Apache — Traefik handles routing and TLS.
+# No Postgres container — uses the existing Dokploy-managed instance.
+# No Redis — generation jobs run in-process.
+#
+# ── Required (set in Dokploy → Compose → Environment) ────────────
+#   DATABASE_URL     postgresql+psycopg2://user:pass@host:5432/documentos
+#   JWT_SECRET       any long random string (32+ chars)
+#   GEMINI_API_KEY   Google AI Studio API key for Gemma 4
+#
+# ── Optional ─────────────────────────────────────────────────────
+#   AI_PROVIDER      auto | google | ollama | openai | mock   (default: auto)
+#   GOOGLE_MODEL     model name override                      (default: gemma-4-26b-a4b-it)
+#   OLLAMA_BASE_URL  Ollama server URL                        (default: http://host.docker.internal:11434)
+#   GEMMA_MODEL      local Gemma model name                   (default: gemma3)
+#   CORS_ORIGINS     comma-separated origins                  (default: https://docos.sagarkundu.me)
 
 services:
   backend:
@@ -11,24 +27,21 @@ services:
       context: .
       dockerfile: docker/Dockerfile.backend
     environment:
-      # External managed database (falls back to SQLite on a volume for zero-config runs)
-      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/data/documentos.db}
-      # Optional / reserved — the generation runner is in-process and needs no Redis
-      REDIS_URL: ${REDIS_URL:-}
+      # Database — managed PostgreSQL (Dokploy). NO SQLite fallback in production.
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       # Auth
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-0123456789abcdef}
-      # AI — Gemma 4 via Google AI SDK and/or local Gemma via Ollama
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # AI providers
       AI_PROVIDER: ${AI_PROVIDER:-auto}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       GOOGLE_MODEL: ${GOOGLE_MODEL:-gemma-4-26b-a4b-it}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       GEMMA_MODEL: ${GEMMA_MODEL:-gemma3}
-      # App
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      # CORS — frontend origin(s)
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://docos.sagarkundu.me}
+      # Paths (container-internal, not configurable)
       PROMPTS_DIR: /app/packages/prompts
       EXPORT_DIR: /app/exports
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - exports:/app/exports
       - backend-data:/app/data
@@ -43,20 +56,61 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.docos-api.rule=Host(`docos-api.sagarkundu.me`)"
+      - "traefik.http.routers.docos-api.entrypoints=websecure"
+      - "traefik.http.routers.docos-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.docos-api.loadbalancer.server.port=8000"
 
-  # SPA served by a tiny Node static server — Dokploy's Traefik routes:
-  #   your-domain/     → frontend:3000
-  #   your-domain/api  → backend:8000
-  # (configure in Dokploy → Compose → Domains; no nginx involved)
   frontend:
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend
-    ports:
-      - "${FRONTEND_PORT:-3000}:3000"
-    depends_on:
-      - backend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://docos-api.sagarkundu.me}
     restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://localhost:3000',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.docos.rule=Host(`docos.sagarkundu.me`)"
+      - "traefik.http.routers.docos.entrypoints=websecure"
+      - "traefik.http.routers.docos.tls.certresolver=letsencrypt"
+      - "traefik.http.services.docos.loadbalancer.server.port=3000"
+
+networks:
+  internal:
+    driver: bridge
+  dokploy-network:
+    external: true
 
 volumes:
   exports:

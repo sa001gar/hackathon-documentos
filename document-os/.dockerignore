@@ -1,0 +1,46 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Node
+node_modules/
+.pnpm-store/
+.vite/
+dist/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# App data
+*.db
+*.db-journal
+apps/backend/exports/
+
+# Env / editors
+.env
+.env.local
+.env.example
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Docs (not needed at runtime)
+docs/
+
+# CI / scripts
+.github/
+scripts/
+
+# Docker build artefacts
+.dockerignore
+docker-compose.yml
+README.md
+AGENTS.md

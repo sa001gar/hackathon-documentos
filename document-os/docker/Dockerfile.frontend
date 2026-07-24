@@ -1,24 +1,49 @@
-# Frontend image: build the SPA, serve it with a tiny Node static server.
-# No nginx — Dokploy's Traefik handles routing/TLS ("/" → this, "/api" → backend).
-FROM node:20-alpine AS build
-WORKDIR /app
-RUN corepack enable
+# syntax=docker/dockerfile:1
+# Frontend image: build the SPA, serve with a tiny static server.
+FROM node:20-alpine AS builder
 
-COPY package.json pnpm-workspace.yaml ./
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
+WORKDIR /app
+
+# Layer caching: copy lock files and manifests first
+COPY pnpm-lock.yaml package.json pnpm-workspace.yaml ./
+COPY packages/shared-types/package.json ./packages/shared-types/
+COPY packages/utils/package.json ./packages/utils/
+COPY apps/frontend/package.json ./apps/frontend/
+COPY apps/backend/package.json ./apps/backend/
+
+RUN corepack enable && pnpm install --frozen-lockfile
+
+# Copy full source and build
 COPY packages/shared-types ./packages/shared-types
 COPY packages/utils ./packages/utils
 COPY apps/frontend ./apps/frontend
 
-RUN pnpm install --frozen-lockfile=false
 RUN pnpm --filter @documentos/frontend build
 
+# ── production runtime image ──────────────────────────────────────
 FROM node:20-alpine
+
+# Create non-root user
+RUN addgroup --system --gid 1001 app && \
+    adduser --system --uid 1001 --ingroup app app
+
 WORKDIR /app
+
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY --from=build /app/apps/frontend/dist ./dist
+# Only the built dist and the tiny server are needed
+COPY --from=builder /app/apps/frontend/dist ./dist
 COPY docker/serve.mjs ./serve.mjs
 
+# Tighten permissions
+RUN chown -R app:app /app && chmod 444 serve.mjs
+
+USER app
+
 EXPOSE 3000
+
 CMD ["node", "serve.mjs"]
