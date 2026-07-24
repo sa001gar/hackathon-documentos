@@ -1,14 +1,15 @@
-import type { DocumentDetail } from "@documentos/shared-types";
+import type { DocumentDetail, RefineAction } from "@documentos/shared-types";
 import { cn } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  AtSign,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   FileText,
   Loader2,
   Maximize2,
+  MessagesSquare,
   Minus,
   Play,
   SendHorizonal,
@@ -25,37 +26,60 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { aiApi, ApiClientError } from "@/lib/api-client";
+import { useComposerStore } from "./composer-store";
 import { useEditorStore } from "./editor-store";
 import { useGenerationStore, type GenPhase } from "./generation-store";
 
-type ComposerTab = "write" | "review" | "diagram" | "research";
+type ComposerTab = "write" | "review";
 
-const TABS: { id: ComposerTab; label: string; enabled: boolean }[] = [
-  { id: "write", label: "Write", enabled: true },
-  { id: "review", label: "Review", enabled: true },
-  { id: "diagram", label: "Diagram", enabled: false },
-  { id: "research", label: "Research", enabled: false },
+const TABS: { id: ComposerTab; label: string }[] = [
+  { id: "write", label: "Write & Edit" },
+  { id: "review", label: "Review" },
 ];
 
 const AGENTS = [
   { id: "auto", label: "Auto (Planner + Writer)" },
-  { id: "planner", label: "Planner" },
-  { id: "writer", label: "Writer" },
-  { id: "reviewer", label: "Reviewer" },
+  { id: "planner", label: "Planner Only" },
+  { id: "writer", label: "Writer Only" },
+  { id: "reviewer", label: "Reviewer Only" },
 ] as const;
 
 type AgentId = (typeof AGENTS)[number]["id"];
 
+const SECTION_INTENTS: [RegExp, RefineAction][] = [
+  [/\brewrite\b/i, "rewrite"],
+  [/\b(improve|polish|better)\b/i, "improve"],
+  [/\b(shorten|condense|trim)\b/i, "shorten"],
+  [/\b(expand|elaborate|longer)\b/i, "expand"],
+  [/\bprofessional\b/i, "professional"],
+  [/\bacademic\b/i, "academic"],
+  [/\blegal\b/i, "legal"],
+  [/\b(friendly|casual)\b/i, "friendly"],
+  [/\bgrammar\b/i, "fix_grammar"],
+  [/\b(summarize|summary|tl;dr)\b/i, "summarize"],
+  [/\b(continue|keep writing)\b/i, "continue"],
+  [/\btranslate\b/i, "translate"],
+];
+
+const REGENERATE_RE = /\b(regenerate|re-?write (the|this) section)\b/i;
+
+function detectSectionAction(prompt: string): RefineAction | "regenerate" | null {
+  if (REGENERATE_RE.test(prompt)) return "regenerate";
+  for (const [re, action] of SECTION_INTENTS) {
+    if (re.test(prompt)) return action;
+  }
+  return null;
+}
+
 const PHASE_LABEL: Record<GenPhase, string> = {
   idle: "",
-  connecting: "Connecting…",
-  planning: "Planning outline…",
-  generating: "Writing",
+  connecting: "Connecting to AI…",
+  planning: "Structuring document outline…",
+  generating: "Writing document sections",
   completed: "Generation complete",
   failed: "Generation failed",
-  cancelled: "Generation cancelled",
+  cancelled: "Generation stopped",
 };
 
 function formatDuration(ms: number): string {
@@ -73,7 +97,7 @@ function useNow(active: boolean): number {
   return now;
 }
 
-/** Live pipeline status strip rendered inside the composer while generating. */
+/** Live pipeline status strip rendered inside the floating dock while generating. */
 function GenerationStrip() {
   const phase = useGenerationStore((s) => s.phase);
   const total = useGenerationStore((s) => s.totalSections);
@@ -100,60 +124,157 @@ function GenerationStrip() {
 
   if (phase === "idle") return null;
 
+  const pct = total > 0 ? Math.round((completed / total) * 100) : active ? 15 : 100;
+
   return (
-    <div className="mb-2 flex items-center gap-2 rounded-xl border border-indigo-200/70 bg-white/90 dark:border-indigo-900/50 dark:bg-zinc-900/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-md">
-      {active ? (
-        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#5551FF]" />
-      ) : phase === "completed" ? (
-        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-      ) : (
-        <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-      )}
-      <span className="min-w-0 flex-1 truncate text-[11.5px]">
-        <span className="font-semibold text-foreground">{PHASE_LABEL[phase]}</span>
-        {currentTitle && active && <span className="text-muted-foreground"> · {currentTitle}</span>}
-        <span className="ml-2 tabular-nums text-muted-foreground/80 font-medium">
-          {completed}/{total}
-          {failed > 0 && <span className="text-destructive font-semibold"> · {failed} failed</span>}
-          {startedAt && ` · ${formatDuration(elapsed)}`}
-        </span>
-      </span>
-      {active && (
+    <div className="relative overflow-hidden rounded-xl border border-indigo-500/20 bg-indigo-50/50 p-2.5 dark:border-indigo-500/30 dark:bg-indigo-950/30">
+      {/* Animated subtle progress bar line */}
+      <div
+        className="absolute bottom-0 left-0 top-0 bg-indigo-500/10 transition-all duration-300 dark:bg-indigo-500/20"
+        style={{ width: `${pct}%` }}
+      />
+
+      <div className="relative flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {active ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#5551FF]" />
+          ) : phase === "completed" ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+          ) : (
+            <XCircle className="h-4 w-4 shrink-0 text-destructive" />
+          )}
+
+          <div className="min-w-0 flex-1 truncate">
+            <div className="flex items-center gap-2 font-medium text-foreground">
+              <span>{PHASE_LABEL[phase]}</span>
+              {startedAt && (
+                <span className="text-[11px] font-mono text-muted-foreground/80">
+                  {formatDuration(elapsed)}
+                </span>
+              )}
+            </div>
+            {currentTitle && active && (
+              <p className="truncate text-[11px] text-muted-foreground">Writing: {currentTitle}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {total > 0 && (
+            <span className="rounded-full bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground border border-border/40">
+              {completed}/{total} {failed > 0 && <span className="text-destructive">({failed} failed)</span>}
+            </span>
+          )}
+
+          {active && (
+            <button
+              type="button"
+              onClick={cancel}
+              className="flex items-center gap-1 rounded-lg border border-border/60 bg-background/90 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground shadow-xs"
+            >
+              <Square className="h-3 w-3" />
+              Stop
+            </button>
+          )}
+
+          {(phase === "failed" || phase === "cancelled") && (
+            <button
+              type="button"
+              onClick={() => void resume()}
+              className="flex items-center gap-1 rounded-lg bg-[#5551FF] px-2.5 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-90 shadow-xs"
+            >
+              <Play className="h-3 w-3 fill-current" />
+              Resume
+            </button>
+          )}
+
+          {!active && (
+            <button
+              type="button"
+              onClick={reset}
+              aria-label="Dismiss"
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Conversation thread panel — expands smoothly above the composer dock. */
+function ThreadPanel() {
+  const thread = useComposerStore((s) => s.thread);
+  const open = useComposerStore((s) => s.threadOpen);
+  const setOpen = useComposerStore((s) => s.setThreadOpen);
+  const clearThread = useComposerStore((s) => s.clearThread);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [thread.length, open]);
+
+  if (thread.length === 0) return null;
+
+  return (
+    <div className="mb-2.5 overflow-hidden rounded-2xl border border-border/80 bg-background/95 shadow-xl backdrop-blur-2xl dark:bg-zinc-900/95">
+      <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 text-xs font-medium text-muted-foreground">
         <button
           type="button"
-          onClick={cancel}
-          className="flex shrink-0 items-center gap-1 rounded-md border border-border/60 bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-all hover:bg-accent hover:text-foreground shadow-sm"
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2 font-semibold text-[#5551FF] hover:opacity-80"
         >
-          <Square className="h-3 w-3" />
-          Stop
+          <MessagesSquare className="h-3.5 w-3.5" />
+          <span>AI Conversation Thread ({thread.length})</span>
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
         </button>
-      )}
-      {(phase === "failed" || phase === "cancelled") && (
+
         <button
           type="button"
-          onClick={() => void resume()}
-          className="flex shrink-0 items-center gap-1 rounded-md border border-indigo-200 bg-[#5551FF]/10 px-2 py-0.5 text-[11px] font-semibold text-[#5551FF] transition-all hover:bg-[#5551FF]/20 shadow-sm"
+          onClick={clearThread}
+          className="text-[11px] text-muted-foreground/70 hover:text-foreground"
         >
-          <Play className="h-3 w-3" />
-          Resume
+          Clear thread
         </button>
-      )}
-      {!active && (
-        <button
-          type="button"
-          onClick={reset}
-          aria-label="Dismiss"
-          className="shrink-0 rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      )}
+      </div>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="max-h-60 space-y-2.5 overflow-y-auto p-3 text-xs"
+          >
+            {thread.map((msg) => (
+              <div
+                key={msg.id}
+                className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}
+              >
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-2xl px-3.5 py-2 leading-relaxed shadow-xs",
+                    msg.role === "user"
+                      ? "bg-[#5551FF] text-white font-medium"
+                      : "bg-indigo-50/90 text-foreground border border-indigo-100/80 dark:bg-zinc-800/90 dark:border-zinc-700/50",
+                  )}
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+            <div ref={endRef} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 /**
- * The permanent floating AI composer — movable & minimizable.
+ * Sleek, Floating AI Command Dock (Cursor / Notion AI inspired).
  */
 export function AiComposer({ doc }: { doc: DocumentDetail }) {
   const queryClient = useQueryClient();
@@ -166,130 +287,194 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
   const start = useGenerationStore((s) => s.start);
   const phase = useGenerationStore((s) => (s.documentId === doc.id ? s.phase : "idle"));
   const running = phase === "connecting" || phase === "planning" || phase === "generating";
+
   const requestReview = useEditorStore((s) => s.requestReview);
+  const activeSectionId = useEditorStore((s) => s.activeSectionId);
   const activeSectionTitle = useEditorStore((s) => s.activeSectionTitle);
   const clearSectionContext = useEditorStore((s) => s.clearSectionContext);
+
+  const focusNonce = useComposerStore((s) => s.focusNonce);
+  const push = useComposerStore((s) => s.push);
+
+  useEffect(() => {
+    if (focusNonce > 0) {
+      setMinimized(false);
+      textareaRef.current?.focus();
+    }
+  }, [focusNonce]);
 
   const review = useMutation({
     mutationFn: () => aiApi.review(doc.id),
     onSuccess: (report) => {
       useEditorStore.getState().setReview(doc.id, report);
       requestReview();
-      toast.success(`Review complete — score ${report.overall_score}/100`);
+      push("ai", `Review complete — overall score ${report.overall_score}/100. Check the Review inspector tab.`);
     },
-    onError: (err) =>
-      toast.error(err instanceof ApiClientError ? err.message : "Review failed"),
+    onError: (err) => {
+      const msg = err instanceof ApiClientError ? err.message : "Review failed";
+      push("ai", `Review failed: ${msg}`);
+      toast.error(msg);
+    },
   });
 
-  // Auto-resize the textarea up to ~8 lines.
+  const sectionAction = useMutation({
+    mutationFn: async ({ action, text }: { action: RefineAction | "regenerate"; text: string }) => {
+      const cached = queryClient.getQueryData<DocumentDetail>(["document", doc.id]);
+      const section = cached?.sections.find((s) => s.id === activeSectionId);
+      if (!section) throw new ApiClientError(0, "no_section", "Focus a section first");
+      if (action === "regenerate") {
+        return { kind: "regen" as const, section: await aiApi.generateSection(section.id, text) };
+      }
+      const res = await aiApi.refine(section.id, {
+        action,
+        selected_text: section.content,
+        instruction: text,
+      });
+      return { kind: "refine" as const, refined: res.refined_text, sectionId: section.id };
+    },
+    onSuccess: (result) => {
+      if (result.kind === "regen") {
+        queryClient.setQueryData<DocumentDetail>(["document", doc.id], (old) =>
+          old
+            ? {
+                ...old,
+                sections: old.sections.map((s) =>
+                  s.id === result.section.id ? { ...s, ...result.section } : s,
+                ),
+              }
+            : old,
+        );
+        push("ai", `Regenerated "${result.section.title}".`);
+      } else {
+        queryClient.setQueryData<DocumentDetail>(["document", doc.id], (old) =>
+          old
+            ? {
+                ...old,
+                sections: old.sections.map((s) =>
+                  s.id === result.sectionId ? { ...s, content: result.refined } : s,
+                ),
+              }
+            : old,
+        );
+        push("ai", `Updated "${activeSectionTitle ?? "section"}".`);
+      }
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiClientError ? err.message : "Action failed";
+      push("ai", msg);
+      toast.error(msg);
+    },
+  });
+
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   }, [prompt]);
 
   const submit = () => {
     const text = prompt.trim();
-    if (!text || running) return;
-    if (tab === "write") {
+    if (!text || running || sectionAction.isPending) return;
+
+    if (tab === "review") {
       setPrompt("");
-      void start(doc.id, text, doc.section_count > 0);
-    } else if (tab === "review") {
-      setPrompt("");
+      push("user", text);
+      push("ai", "Running AI review…");
       review.mutate();
+      return;
     }
+
+    setPrompt("");
+    push("user", text);
+    if (activeSectionId) {
+      const action = detectSectionAction(text);
+      if (action) {
+        sectionAction.mutate({ action, text });
+        return;
+      }
+    }
+    void start(doc.id, text, doc.section_count > 0);
   };
 
-  const canSubmit = prompt.trim().length > 0 && !running && (tab === "write" || tab === "review") && !review.isPending;
+  const busy = running || review.isPending || sectionAction.isPending;
+  const canSubmit = prompt.trim().length > 0 && !busy;
 
   if (minimized) {
     return (
-      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[100] flex justify-center px-4">
-        <motion.div
-          drag
-          dragMomentum={false}
-          className="pointer-events-auto flex items-center gap-2.5 rounded-full border-2 border-[#5551FF]/70 bg-gradient-to-r from-indigo-50/95 via-white/95 to-violet-50/90 dark:from-zinc-900/95 dark:via-zinc-950/95 dark:to-indigo-950/80 px-4 py-2 text-xs font-semibold text-foreground shadow-lg shadow-[#5551FF]/20 backdrop-blur-2xl cursor-grab active:cursor-grabbing"
+      <div className="fixed inset-x-0 bottom-6 z-[100] flex justify-center px-4 pointer-events-none">
+        <motion.button
+          type="button"
+          onClick={() => setMinimized(false)}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-indigo-500/30 bg-background/95 px-4 py-2.5 text-xs font-semibold text-foreground shadow-2xl shadow-indigo-500/20 backdrop-blur-2xl hover:border-[#5551FF] transition-all"
         >
-          <div className="flex items-center gap-1.5 text-[#5551FF]">
-            <Sparkles className="h-4 w-4" />
-            <span>AI Assistant</span>
-          </div>
+          <Sparkles className="h-4 w-4 text-[#5551FF] animate-pulse" />
+          <span>AI Assistant</span>
           {running && (
-            <span className="flex items-center gap-1 text-[11px] font-medium text-[#5551FF]">
+            <span className="flex items-center gap-1 text-[11px] text-[#5551FF]">
               <Loader2 className="h-3 w-3 animate-spin" />
-              Writing…
+              Generating…
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => setMinimized(false)}
-            aria-label="Expand AI Assistant"
-            className="ml-1 rounded-full bg-[#5551FF]/10 p-1 text-[#5551FF] transition-colors hover:bg-[#5551FF]/20"
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
-        </motion.div>
+          <Maximize2 className="h-3.5 w-3.5 opacity-60 ml-1" />
+        </motion.button>
       </div>
     );
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[100] flex justify-center px-4">
+    <div className="fixed inset-x-0 bottom-6 z-[100] flex justify-center px-4 pointer-events-none">
       <motion.div
-        drag
-        dragMomentum={false}
-        className="pointer-events-auto w-full max-w-2xl cursor-default"
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="pointer-events-auto w-full max-w-2xl"
       >
-        {/* Glowing gradient background box with rounded border */}
-        <div className="rounded-2xl border-2 border-[#5551FF]/60 dark:border-[#6366F1]/60 bg-gradient-to-br from-indigo-50/90 via-white/95 to-violet-50/80 dark:from-zinc-900/95 dark:via-zinc-950/95 dark:to-indigo-950/60 shadow-xl shadow-[#5551FF]/15 backdrop-blur-2xl p-3 space-y-1.5">
-          {/* Header tab row & Drag handle */}
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1">
-                {TABS.map((t) => (
-                  <Tooltip key={t.id}>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <button
-                          type="button"
-                          disabled={!t.enabled}
-                          onClick={() => setTab(t.id)}
-                          className={cn(
-                            "rounded-xl px-3 py-1 text-xs font-semibold transition-all duration-200",
-                            tab === t.id
-                              ? "bg-[#5551FF] text-white shadow-sm scale-[1.02]"
-                              : "text-muted-foreground/70 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5",
-                            !t.enabled && "cursor-not-allowed opacity-40",
-                          )}
-                        >
-                          {t.label}
-                        </button>
-                      </span>
-                    </TooltipTrigger>
-                    {!t.enabled && <TooltipContent side="top">Coming soon</TooltipContent>}
-                  </Tooltip>
-                ))}
-              </div>
+        <ThreadPanel />
 
-            <div className="flex items-center gap-1.5">
-              <span className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground/70 bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full">
-                <Sparkles className="h-3.5 w-3.5 text-[#5551FF]" />
+        {/* Floating Command Dock Card */}
+        <div className="overflow-hidden rounded-2xl border border-indigo-500/30 bg-background/90 p-3 shadow-2xl shadow-indigo-500/10 backdrop-blur-2xl dark:border-indigo-500/40 dark:bg-zinc-950/90">
+          {/* Top header navigation */}
+          <div className="flex items-center justify-between pb-2">
+            <div className="flex items-center gap-1.5 bg-muted/40 p-0.5 rounded-xl border border-border/40">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    "rounded-lg px-3 py-1 text-xs font-semibold transition-all",
+                    tab === t.id
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#5551FF] dark:bg-indigo-500/20 dark:text-indigo-300">
+                <Sparkles className="h-3 w-3" />
                 Gemma 4
               </span>
               <button
                 type="button"
                 onClick={() => setMinimized(true)}
                 aria-label="Minimize AI Assistant"
-                className="rounded-lg p-1 text-muted-foreground transition-colors hover:bg-black/5 dark:hover:bg-white/5 hover:text-foreground"
+                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               >
                 <Minus className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
 
-          <div className="px-1 pt-1">
-            <GenerationStrip />
+          <GenerationStrip />
 
+          {/* Prompt input field */}
+          <div className="relative pt-2">
             <textarea
               ref={textareaRef}
               value={prompt}
@@ -303,92 +488,77 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
               rows={1}
               placeholder={
                 tab === "write"
-                  ? "Ask AI to write or improve this document…"
-                  : tab === "review"
-                    ? "What should the Reviewer focus on? (optional)"
-                    : "Select a tab above…"
+                  ? activeSectionTitle
+                    ? `Instruct AI for section "${activeSectionTitle}"…`
+                    : "Ask AI to draft, rewrite, or structure your document…"
+                  : "Specify review criteria or leave blank for a full document review…"
               }
-              disabled={!TABS.find((t) => t.id === tab)?.enabled}
-              className="w-full resize-none bg-transparent px-1 py-1 text-[14px] leading-relaxed outline-none placeholder:text-muted-foreground/50 font-normal"
+              className="w-full resize-none bg-transparent px-1 text-sm font-normal leading-relaxed outline-none placeholder:text-muted-foreground/60"
             />
+          </div>
 
-            {/* Context chips */}
-            <div className="my-1.5 flex flex-wrap items-center gap-1.5 px-1">
-              <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#5551FF]/10 border border-[#5551FF]/25 px-2.5 py-0.5 text-[11px] font-semibold text-[#5551FF] shadow-sm">
-                <FileText className="h-3.5 w-3.5" />
-                {doc.title}
-              </span>
-              {activeSectionTitle && (
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#5551FF] px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-xs">
-                  {activeSectionTitle}
+          {/* Bottom Controls Row */}
+          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 pt-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-x-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    aria-label="Remove section context"
+                    className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground hover:border-[#5551FF] transition-all shadow-xs"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-[#5551FF]" />
+                    <span>{AGENTS.find((a) => a.id === agent)?.label ?? "Auto"}</span>
+                    <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" sideOffset={6} className="z-[110] rounded-xl p-1 text-xs shadow-xl">
+                  {AGENTS.map((a) => (
+                    <DropdownMenuItem key={a.id} onClick={() => setAgent(a.id)} className="cursor-pointer rounded-lg">
+                      {a.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {activeSectionTitle ? (
+                <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#5551FF] px-2.5 py-1 text-xs font-medium text-white shadow-xs truncate max-w-[200px]">
+                  <FileText className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{activeSectionTitle}</span>
+                  <button
+                    type="button"
+                    aria-label="Clear section context"
                     onClick={clearSectionContext}
-                    className="rounded-full p-0.5 transition-colors hover:bg-white/25"
+                    className="rounded-full p-0.5 hover:bg-white/20"
                   >
                     <X className="h-3 w-3" />
                   </button>
                 </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground/80 px-1">
+                  <FileText className="h-3 w-3" />
+                  Whole Document
+                </span>
               )}
             </div>
 
-            {/* Bottom pills & action button */}
-            <div className="mt-1 flex items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-1.5 rounded-full border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-zinc-900 px-3 py-1 text-[11.5px] font-medium text-foreground/80 shadow-sm transition-all hover:border-[#5551FF]"
-                    >
-                      <Sparkles className="h-3.5 w-3.5 text-[#5551FF]" />
-                      {AGENTS.find((a) => a.id === agent)?.label ?? "Auto"}
-                      <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" side="top" sideOffset={6} className="z-[110] text-xs rounded-xl p-1 shadow-md">
-                    {AGENTS.map((a) => (
-                      <DropdownMenuItem key={a.id} onClick={() => setAgent(a.id)} className="rounded-lg cursor-pointer">
-                        {a.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-1.5 rounded-full border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-zinc-900 px-3 py-1 text-[11.5px] font-medium text-foreground/80 shadow-sm transition-all hover:border-[#5551FF]"
-                    >
-                      <AtSign className="h-3.5 w-3.5 text-[#5551FF]" />
-                      Context
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Attach context (coming soon)</TooltipContent>
-                </Tooltip>
-              </div>
-
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!canSubmit}
-                aria-label="Send"
-                className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
-                  canSubmit
-                    ? "bg-[#5551FF] text-white shadow-md shadow-[#5551FF]/25 hover:bg-[#4540FF] hover:scale-105 active:scale-95"
-                    : "bg-muted/80 text-muted-foreground/40",
-                )}
-              >
-                {review.isPending || running ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <SendHorizonal className="h-4 w-4" />
-                )}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!canSubmit}
+              aria-label="Send"
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+                canSubmit
+                  ? "bg-[#5551FF] text-white shadow-md shadow-[#5551FF]/20 hover:scale-105 hover:bg-[#4540FF] active:scale-95"
+                  : "bg-muted/60 text-muted-foreground/40 cursor-not-allowed",
+              )}
+            >
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <SendHorizonal className="h-4 w-4" />
+              )}
+            </button>
           </div>
         </div>
       </motion.div>

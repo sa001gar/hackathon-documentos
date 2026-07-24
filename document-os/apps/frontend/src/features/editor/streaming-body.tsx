@@ -1,7 +1,7 @@
-import katex from "katex";
 import { Loader2, Sparkles } from "lucide-react";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import { countWords, markdownToHtmlFast } from "@/lib/markdown";
 
@@ -10,21 +10,33 @@ import { countWords, markdownToHtmlFast } from "@/lib/markdown";
  * (`<span data-math data-tex>` produced by the markdown pipeline) are
  * rendered with KaTeX — the same rendering the editor's MathNode produces,
  * so streaming and post-save content look identical.
+ *
+ * KaTeX is lazy-loaded so bundlers code-split its ~258 KB (gz 50 KB).
  */
 function Prose({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [katexLib, setKatexLib] = useState<typeof import("katex") | null>(null);
 
   useEffect(() => {
+    import("katex").then(setKatexLib).catch(() => {});
+  }, []);
+
+  const renderMath = useCallback(() => {
+    if (!katexLib) return;
     ref.current?.querySelectorAll("span[data-math]").forEach((el) => {
       const tex = el.getAttribute("data-tex") ?? "";
       const display = el.getAttribute("data-display") === "block";
       try {
-        katex.render(tex, el as HTMLElement, { displayMode: display, throwOnError: false });
+        katexLib.render(tex, el as HTMLElement, { displayMode: display, throwOnError: false });
       } catch {
         // Leave the raw TeX source visible if KaTeX can't parse it.
       }
     });
-  }, [html]);
+  }, [katexLib]);
+
+  useEffect(() => {
+    renderMath();
+  }, [renderMath, html]);
 
   return <div ref={ref} className="docos-prose" dangerouslySetInnerHTML={{ __html: html }} />;
 }
@@ -43,7 +55,8 @@ export const StreamedMarkdown = memo(function StreamedMarkdown({
   showCaret?: boolean;
 }) {
   const typed = useTypewriter(tokens);
-  const html = useMemo(() => markdownToHtmlFast(typed), [typed]);
+  const throttled = useThrottledValue(typed, 120);
+  const html = useMemo(() => markdownToHtmlFast(throttled), [throttled]);
 
   if (!typed) {
     return <span className="text-muted-foreground">Waiting for the first tokens…</span>;
@@ -65,7 +78,8 @@ export const StreamedMarkdown = memo(function StreamedMarkdown({
  */
 export function StreamingBody({ tokens }: { tokens: string }) {
   const typed = useTypewriter(tokens);
-  const html = useMemo(() => markdownToHtmlFast(typed), [typed]);
+  const throttled = useThrottledValue(typed, 120);
+  const html = useMemo(() => markdownToHtmlFast(throttled), [throttled]);
 
   return (
     <div className="relative my-3 flex flex-col overflow-hidden rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-white/95 dark:bg-zinc-950/95 p-4 shadow-sm shadow-indigo-500/5 backdrop-blur-xl">

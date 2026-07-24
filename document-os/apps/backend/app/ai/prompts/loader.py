@@ -5,6 +5,7 @@ description) followed by the template body with {{variable}} placeholders.
 """
 import logging
 import re
+import time
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -15,6 +16,12 @@ from app.core.config import get_settings
 logger = logging.getLogger("documentos.ai.prompts")
 
 AGENTS = ("planner", "writer", "refiner", "validator", "reviewer", "exporter")
+
+# Prompts change only via explicit re-seeding, so cache resolutions briefly.
+# Without this every agent instantiation (once per generated section) hits the
+# ai_prompts table — an N+1 pattern that costs real latency on remote Postgres.
+_PROMPT_CACHE: dict[str, tuple[float, tuple[str, float, int]]] = {}
+_CACHE_TTL_S = 60.0
 
 
 def _prompts_dir() -> Path | None:
@@ -70,31 +77,46 @@ def seed_prompts_from_files(db: Session) -> None:
             temperature=float(parsed["config"].get("temperature", DEFAULT_CONFIG[agent]["temperature"])),
             max_tokens=int(parsed["config"].get("max_tokens", DEFAULT_CONFIG[agent]["max_tokens"])),
         )
+    _PROMPT_CACHE.clear()  # seeded prompts must take effect immediately
 
 
 def get_prompt(db: Session, agent: str) -> tuple[str, float, int]:
     """Return (template, temperature, max_tokens) for an agent.
 
     Resolution order: active DB prompt → prompt file → built-in default.
+    Cached for _CACHE_TTL_S seconds — see _PROMPT_CACHE note above.
     """
     from app.repositories import ai_prompt_repo
 
+    now = time.monotonic()
+    hit = _PROMPT_CACHE.get(agent)
+    if hit is not None and now - hit[0] < _CACHE_TTL_S:
+        return hit[1]
+
     row = ai_prompt_repo.get_active(db, agent)
     if row is not None:
-        return row.template, row.temperature, row.max_tokens
-
-    directory = _prompts_dir()
-    if directory is not None:
-        path = directory / f"{agent}.md"
-        if path.exists():
-            parsed = _parse_prompt_file(path)
-            return (
-                parsed["template"],
-                float(parsed["config"].get("temperature", DEFAULT_CONFIG[agent]["temperature"])),
-                int(parsed["config"].get("max_tokens", DEFAULT_CONFIG[agent]["max_tokens"])),
+        result = (row.template, row.temperature, row.max_tokens)
+    else:
+        directory = _prompts_dir()
+        result = None
+        if directory is not None:
+            path = directory / f"{agent}.md"
+            if path.exists():
+                parsed = _parse_prompt_file(path)
+                result = (
+                    parsed["template"],
+                    float(parsed["config"].get("temperature", DEFAULT_CONFIG[agent]["temperature"])),
+                    int(parsed["config"].get("max_tokens", DEFAULT_CONFIG[agent]["max_tokens"])),
+                )
+        if result is None:
+            result = (
+                DEFAULT_PROMPTS[agent],
+                DEFAULT_CONFIG[agent]["temperature"],
+                DEFAULT_CONFIG[agent]["max_tokens"],
             )
 
-    return DEFAULT_PROMPTS[agent], DEFAULT_CONFIG[agent]["temperature"], DEFAULT_CONFIG[agent]["max_tokens"]
+    _PROMPT_CACHE[agent] = (now, result)
+    return result
 
 
 def render(template: str, **variables: str) -> str:

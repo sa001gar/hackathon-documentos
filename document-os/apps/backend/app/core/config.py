@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Any OpenAI-compatible server (vLLM, llama.cpp, LM Studio)
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
-    AI_REQUEST_TIMEOUT: int = 180
+    AI_REQUEST_TIMEOUT: int = 90
     AI_MAX_RETRIES: int = 2
     PROMPTS_DIR: str = "../../packages/prompts"
 

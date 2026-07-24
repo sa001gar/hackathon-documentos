@@ -39,6 +39,8 @@ interface GenerationStore {
    * directly without triggering re-renders per token.
    */
   statusBySection: Record<string, GenSectionStatus>;
+  /** Raw streamed planner output (the outline forming live). */
+  planTokens: string;
   currentSectionId: string | null;
   totalSections: number;
   completedCount: number;
@@ -59,6 +61,7 @@ const INITIAL = {
   documentTitle: "",
   sections: [] as GenSection[],
   statusBySection: {} as Record<string, GenSectionStatus>,
+  planTokens: "",
   currentSectionId: null as string | null,
   totalSections: 0,
   completedCount: 0,
@@ -126,8 +129,11 @@ export const useGenerationStore = create<GenerationStore>()((set, get) => {
           case "generation_started":
             break;
           case "planning_started":
-            set((s) => ({ ...s, phase: "planning" }));
+            set((s) => ({ ...s, phase: "planning", planTokens: "" }));
             act("info", "Planning document outline…");
+            break;
+          case "plan_token":
+            set((s) => ({ planTokens: s.planTokens + event.value }));
             break;
           case "outline_created": {
             const sections: GenSection[] = event.sections.map((x) => ({

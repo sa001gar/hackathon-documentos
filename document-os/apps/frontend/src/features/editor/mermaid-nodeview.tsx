@@ -1,7 +1,6 @@
 import { cn } from "@documentos/utils";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { Check, Code2, Copy, Download, ImageDown, Maximize2, Pencil } from "lucide-react";
-import mermaid from "mermaid";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,7 @@ import { useTheme } from "@/hooks/use-theme";
 
 let mermaidSeq = 0;
 
-/** Renders a mermaid source string as an SVG diagram (debounced). */
+/** Renders a mermaid source string as an SVG diagram (debounced). Mermaid's ~679KB is lazy-loaded. */
 export function MermaidDiagram({ code, className }: { code: string; className?: string }) {
   const { resolvedTheme } = useTheme();
   const debounced = useDebouncedValue(code, 500);
@@ -28,21 +27,23 @@ export function MermaidDiagram({ code, className }: { code: string; className?: 
       return;
     }
     const renderId = `${idRef.current}-${Date.now()}`;
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: resolvedTheme === "dark" ? "dark" : "default",
-      securityLevel: "strict",
-      fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-    });
-    mermaid
-      .render(renderId, source)
-      .then(({ svg: rendered }) => {
+    (async () => {
+      const mod = await import("mermaid");
+      if (cancelled) return;
+      const mmd = mod.default;
+      mmd.initialize({
+        startOnLoad: false,
+        theme: resolvedTheme === "dark" ? "dark" : "default",
+        securityLevel: "strict",
+        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+      });
+      try {
+        const { svg: rendered } = await mmd.render(renderId, source);
         if (!cancelled) {
           setSvg(rendered);
           setError(null);
         }
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         // Mermaid leaves a stray error element in the DOM on parse failures.
         document.getElementById(`d${renderId}`)?.remove();
         document.getElementById(renderId)?.remove();
@@ -52,7 +53,8 @@ export function MermaidDiagram({ code, className }: { code: string; className?: 
             err instanceof Error ? err.message.replace(/\n+/g, " ").slice(0, 200) : "Invalid diagram syntax",
           );
         }
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

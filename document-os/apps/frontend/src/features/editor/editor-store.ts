@@ -19,8 +19,6 @@ interface SectionSaveInfo {
 interface EditorUiState {
   autoSaveEnabled: boolean;
   setAutoSaveEnabled: (enabled: boolean) => void;
-  generateOpen: boolean;
-  setGenerateOpen: (open: boolean) => void;
   scrollTarget: string | null;
   setScrollTarget: (id: string | null) => void;
   inspectorTab: InspectorTab;
@@ -53,8 +51,6 @@ interface EditorUiState {
 export const useEditorStore = create<EditorUiState>()((set) => ({
   autoSaveEnabled: true,
   setAutoSaveEnabled: (autoSaveEnabled) => set({ autoSaveEnabled }),
-  generateOpen: false,
-  setGenerateOpen: (generateOpen) => set({ generateOpen }),
   scrollTarget: null,
   setScrollTarget: (scrollTarget) => set({ scrollTarget }),
   inspectorTab: "outline",

@@ -1,6 +1,5 @@
 import { mergeAttributes, Node } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
-import katex from "katex";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@documentos/utils";
 
@@ -18,20 +17,25 @@ function MathView({ node, updateAttributes, selected }: NodeViewProps) {
   const display = node.attrs.display === "block";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(tex);
+  const [katex, setKatex] = useState<typeof import("katex")["default"]>();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    import("katex").then((mod) => setKatex(mod.default));
+  }, []);
 
   useEffect(() => {
     if (editing) inputRef.current?.select();
   }, [editing]);
 
   const html = useMemo(() => {
-    if (!tex.trim()) return "";
+    if (!tex.trim() || !katex) return "";
     try {
       return katex.renderToString(tex, { displayMode: display, throwOnError: false });
     } catch {
       return "";
     }
-  }, [tex, display]);
+  }, [tex, display, katex]);
 
   const commit = () => {
     updateAttributes({ tex: draft.trim() });

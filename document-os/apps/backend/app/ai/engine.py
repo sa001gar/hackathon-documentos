@@ -2,6 +2,7 @@
 
 Never call providers from endpoints or services; everything funnels through here.
 """
+import time
 from datetime import datetime, timezone
 from typing import AsyncIterator
 
@@ -68,7 +69,13 @@ class AIEngine:
             parts.append(f"SECTION: {s.title}\n{s.content.strip() or '(empty)'}\n")
         return "\n".join(parts)
 
-    def _build_context(self, db: Session, section: DocumentSection, instructions: str | None) -> SectionContext:
+    def _build_context(
+        self,
+        db: Session,
+        section: DocumentSection,
+        instructions: str | None,
+        outline: str | None = None,
+    ) -> SectionContext:
         from app.services import document_service
 
         document = document_repo.get(db, section.document_id)
@@ -77,7 +84,7 @@ class AIEngine:
         return SectionContext(
             document_title=document.title,
             document_description=document.description or "",
-            outline=self._outline(db, document.id),
+            outline=outline if outline is not None else self._outline(db, document.id),
             section_title=section.title,
             section_path=self._section_path(section),
             brief=section.ai_prompt or "",
@@ -97,6 +104,51 @@ class AIEngine:
         return await PlannerAgent(db).plan(
             db, prompt=prompt, existing_structure=existing_structure, document_id=document_id
         )
+
+    async def stream_plan(
+        self,
+        db: Session,
+        *,
+        prompt: str,
+        document_id: str | None = None,
+    ) -> AsyncIterator[tuple[str, object]]:
+        """Stream the planner live: yields ("token", str) events, then one
+        ("plan", PlannerOutput) event after parsing the accumulated text.
+
+        Streaming removes the 30–120s silent window of the blocking planner
+        call — the client sees the outline forming token-by-token.
+        """
+        from app.repositories import ai_log_repo
+
+        agent = PlannerAgent(db)
+        system = render(agent.system_prompt)
+        user_prompt = agent.build_user_prompt(prompt, None)
+        messages = [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user_prompt)]
+        provider = await aget_provider()
+
+        chunks: list[str] = []
+        started = time.perf_counter()
+        async for token in provider.stream(
+            messages, temperature=agent.temperature, max_tokens=agent.max_tokens
+        ):
+            chunks.append(token)
+            yield ("token", token)
+
+        raw = "".join(chunks)
+        plan = agent.parse_plan(raw)  # raises AIParseError → caller retries
+        ai_log_repo.create_log(
+            db,
+            document_id=document_id,
+            agent="planner",
+            action="stream_plan",
+            model=getattr(provider, "model", provider.name),
+            system_prompt=system[:8000],
+            user_prompt=user_prompt[:8000],
+            response=raw[:8000],
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            status="success",
+        )
+        yield ("plan", plan)
 
     async def generate_section(
         self, db: Session, *, section_id: str, instructions: str | None = None
@@ -125,9 +177,19 @@ class AIEngine:
             raise
 
     async def stream_section(
-        self, db: Session, *, section_id: str, instructions: str | None = None
+        self,
+        db: Session,
+        *,
+        section_id: str,
+        instructions: str | None = None,
+        outline: str | None = None,
     ) -> AsyncIterator[str]:
-        """Yield writer tokens as they arrive; persist the cleaned result at the end."""
+        """Yield writer tokens as they arrive; persist the cleaned result at the end.
+
+        `outline` lets batch pipelines (full-document generation) compute the
+        document outline ONCE and share it across every section — otherwise
+        each section re-queries and re-renders the outline (N+1).
+        """
         from app.repositories import ai_log_repo
 
         section = section_repo.get(db, section_id)
@@ -137,7 +199,7 @@ class AIEngine:
         db.add(section)
         db.commit()
 
-        context = self._build_context(db, section, instructions)
+        context = self._build_context(db, section, instructions, outline)
         agent = WriterAgent(db)
         system = render(agent.system_prompt)
         user_prompt = agent.build_user_prompt(context)

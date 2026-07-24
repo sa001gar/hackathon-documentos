@@ -241,6 +241,7 @@ export interface Export {
 export type DocGenEvent =
   | { type: "generation_started"; document_id: string }
   | { type: "planning_started" }
+  | { type: "plan_token"; value: string }
   | {
       type: "outline_created";
       title: string;
@@ -251,7 +252,7 @@ export type DocGenEvent =
   | { type: "token"; section_id: string; value: string }
   | { type: "section_completed"; section: Section }
   | { type: "section_failed"; section_id: string; title: string; message: string }
-  | { type: "generation_completed"; document_id: string; total: number; succeeded: number; failed: number }
+  | { type: "generation_completed"; document_id: string; total: number; succeeded: number; failed: number; duration_ms?: number }
   | { type: "error"; message: string };
 
 /** Single-section generation events (POST /sections/{id}/generate/stream). */

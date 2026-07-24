@@ -4,6 +4,7 @@ Endpoints never call providers directly (see app/ai).
 """
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
@@ -27,6 +28,8 @@ from app.schemas.ai import (
     ValidationReport,
 )
 from app.schemas.section import SectionRead
+
+logger = logging.getLogger("documentos.ai.generation")
 
 router = APIRouter()
 
@@ -81,23 +84,51 @@ async def stream_generate_document(
         return f"data: {json.dumps(obj)}\n\n"
 
     async def event_stream():
+        import time as _time
+
+        from app.ai.parsers import AIParseError
+        from app.core.errors import AIProviderError
+        from app.core.config import get_settings
+
         stream_db = SessionLocal()
         current_section_id: str | None = None
+        t0 = _time.perf_counter()
         try:
             engine = get_ai_engine()
             doc = document_repo.get(stream_db, document_id)
 
             yield sse({"type": "generation_started", "document_id": document_id})
 
-            # 1. Plan — build outline unless we keep the existing structure
+            # 1. Plan — build outline unless we keep the existing structure.
+            #    The planner STREAMS (plan_token events) so the client sees the
+            #    outline forming within ~1-2s instead of waiting 30-120s for a
+            #    blocking completion call.
             sections = document_service.get_sections(stream_db, document_id)
             has_structure = any(s.title for s in sections)
             if not has_structure or not data.use_existing_structure:
                 yield sse({"type": "planning_started"})
-                plan = await engine.plan(
-                    stream_db, prompt=data.prompt or "Write a professional document.",
-                    existing_structure=None, document_id=document_id,
-                )
+                plan = None
+                last_plan_error: Exception | None = None
+                max_attempts = get_settings().AI_MAX_RETRIES + 1
+                for attempt in range(max_attempts):
+                    try:
+                        async for kind, payload in engine.stream_plan(
+                            stream_db,
+                            prompt=data.prompt or "Write a professional document.",
+                            document_id=document_id,
+                        ):
+                            if kind == "token":
+                                yield sse({"type": "plan_token", "value": payload})
+                            else:
+                                plan = payload
+                        break
+                    except (AIParseError, AIProviderError) as exc:
+                        last_plan_error = exc
+                        logger.warning("Planner attempt %d/%d failed: %s", attempt + 1, max_attempts, exc)
+                if plan is None:
+                    raise AIProviderError(f"Planner failed after {max_attempts} attempts: {last_plan_error}")
+                plan_ms = int((_time.perf_counter() - t0) * 1000)
+                logger.info("Planner completed in %dms (%d sections)", plan_ms, len(plan.sections))
                 for s in section_repo.list_for_document(stream_db, document_id):
                     if s.parent_id is None:
                         section_repo.delete_subtree(stream_db, s)
@@ -111,6 +142,10 @@ async def stream_generate_document(
             sections = document_service.get_sections(stream_db, document_id)
             todo = [s for s in sections if s.status in ("pending", "error")]
             total = len(todo)
+
+            # Compute the writer's outline context ONCE for the whole run —
+            # stream_section would otherwise rebuild it per section (N+1).
+            shared_outline = engine._outline(stream_db, document_id)
 
             # Full outline with statuses — lets the client render placeholders
             # immediately and mark already-completed sections on reconnect.
@@ -141,12 +176,19 @@ async def stream_generate_document(
                     "total": total,
                 })
                 try:
-                    async for token in engine.stream_section(stream_db, section_id=section.id):
+                    section_t0 = _time.perf_counter()
+                    async for token in engine.stream_section(
+                        stream_db, section_id=section.id, outline=shared_outline
+                    ):
                         yield sse({"type": "token", "section_id": section.id, "value": token})
                     s = section_repo.get(stream_db, section.id)
                     payload = SectionRead.model_validate(s).model_dump(mode="json")
                     yield sse({"type": "section_completed", "section": payload})
                     succeeded += 1
+                    logger.info(
+                        "Section %d/%d '%s' written in %dms",
+                        index + 1, total, section.title, int((_time.perf_counter() - section_t0) * 1000),
+                    )
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -171,12 +213,18 @@ async def stream_generate_document(
                 stream_db.add(doc)
                 stream_db.commit()
 
+            total_ms = int((_time.perf_counter() - t0) * 1000)
+            logger.info(
+                "Generation finished: %d/%d sections in %dms (%.1fs/section avg)",
+                succeeded, total, total_ms, (total_ms / max(succeeded, 1)) / 1000,
+            )
             yield sse({
                 "type": "generation_completed",
                 "document_id": document_id,
                 "total": total,
                 "succeeded": succeeded,
                 "failed": failed,
+                "duration_ms": total_ms,
             })
         except asyncio.CancelledError:
             # Client disconnected: reset in-flight work so a later resume picks up cleanly.

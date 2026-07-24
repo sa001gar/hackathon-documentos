@@ -13,10 +13,10 @@ import { ApiClientError, documentApi, sectionApi, usersApi } from "@/lib/api-cli
 import { useUiStore } from "@/lib/ui-store";
 import { VersionsPanel } from "@/features/versions/versions-panel";
 import { AiComposer } from "./ai-composer";
+import { useComposerStore } from "./composer-store";
 import { EditorHeader } from "./editor-header";
 import { EditorToolbar } from "./editor-toolbar";
 import { useEditorStore } from "./editor-store";
-import { GenerateDialog } from "./generate-dialog";
 import { PlanningState } from "./planning-state";
 import { useGenerationStore } from "./generation-store";
 import { useExportDocument } from "./export-menu";
@@ -60,7 +60,6 @@ export function EditorPage() {
   const autosaveInterval = settings?.autosave_interval_ms ?? 1500;
 
   const setLastDocumentId = useUiStore((s) => s.setLastDocumentId);
-  const setGenerateOpen = useEditorStore((s) => s.setGenerateOpen);
   const scrollTarget = useEditorStore((s) => s.scrollTarget);
   const setScrollTarget = useEditorStore((s) => s.setScrollTarget);
   const requestedAction = useEditorStore((s) => s.requestedAction);
@@ -72,13 +71,16 @@ export function EditorPage() {
     s.documentId === documentId ? s.currentSectionId : null,
   );
   const clearSectionContext = useEditorStore((s) => s.clearSectionContext);
+  const requestComposerFocus = useComposerStore((s) => s.requestFocus);
+  const clearThread = useComposerStore((s) => s.clearThread);
   const prevGenPhase = useRef<string>("idle");
 
   useEffect(() => {
     if (documentId) setLastDocumentId(documentId);
     resetSaveStates();
     clearSectionContext();
-  }, [documentId, setLastDocumentId, resetSaveStates, clearSectionContext]);
+    clearThread();
+  }, [documentId, setLastDocumentId, resetSaveStates, clearSectionContext, clearThread]);
 
   // Toast on generation completion/failure (only while this doc is open).
   useEffect(() => {
@@ -181,9 +183,9 @@ export function EditorPage() {
                 <EmptyState
                   icon={FilePlus2}
                   title="This document is empty"
-                  hint="Add sections manually, or let the AI plan and write the whole document from a prompt."
-                  actionLabel="Generate with AI"
-                  onAction={() => setGenerateOpen(true)}
+                  hint="Tell the AI what to write in the composer below, or add sections manually."
+                  actionLabel="Ask AI to write"
+                  onAction={requestComposerFocus}
                 />
                 <div className="flex justify-center pb-6">
                   <Button
@@ -227,7 +229,6 @@ export function EditorPage() {
         </motion.div>
       </div>
       <AiComposer doc={doc} />
-      <GenerateDialog document={doc} />
       <VersionsPanel />
     </div>
   );
