@@ -30,9 +30,7 @@ function AuthShell({ children, title, subtitle }: { children: React.ReactNode; t
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <FileText className="h-5 w-5" />
-          </div>
+          <img src="/logo.jpg" alt="DocumentOS Logo" className="h-12 w-12 rounded-2xl object-cover shadow-md border border-[#5551FF]/30" />
           <h1 className="text-xl font-semibold tracking-tight">DocumentOS</h1>
           <p className="text-sm text-muted-foreground">AI Document Operating System</p>
         </div>

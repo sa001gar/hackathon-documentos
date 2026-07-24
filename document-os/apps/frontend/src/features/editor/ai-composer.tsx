@@ -1,12 +1,13 @@
 import type { DocumentDetail, RefineAction } from "@documentos/shared-types";
 import { cn } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useDragControls, type PanInfo } from "framer-motion";
 import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   FileText,
+  GripHorizontal,
   Loader2,
   Maximize2,
   MessagesSquare,
@@ -219,12 +220,12 @@ function ThreadPanel() {
   if (thread.length === 0) return null;
 
   return (
-    <div className="mb-2.5 overflow-hidden rounded-2xl border border-border/80 bg-background/95 shadow-xl backdrop-blur-2xl dark:bg-zinc-900/95">
+    <div className="mb-2.5 overflow-hidden rounded-2xl border-2 border-[#5551FF]/40 bg-background/95 shadow-xl shadow-[#5551FF]/15 backdrop-blur-2xl dark:border-[#5551FF]/60 dark:bg-zinc-900/95">
       <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 text-xs font-medium text-muted-foreground">
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex items-center gap-2 font-semibold text-[#5551FF] hover:opacity-80"
+          className="flex items-center gap-2 font-semibold text-[#5551FF] hover:opacity-80 transition-opacity"
         >
           <MessagesSquare className="h-3.5 w-3.5" />
           <span>AI Conversation Thread ({thread.length})</span>
@@ -234,7 +235,7 @@ function ThreadPanel() {
         <button
           type="button"
           onClick={clearThread}
-          className="text-[11px] text-muted-foreground/70 hover:text-foreground"
+          className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
         >
           Clear thread
         </button>
@@ -257,7 +258,7 @@ function ThreadPanel() {
                   className={cn(
                     "max-w-[85%] rounded-2xl px-3.5 py-2 leading-relaxed shadow-xs",
                     msg.role === "user"
-                      ? "bg-[#5551FF] text-white font-medium"
+                      ? "bg-[#5551FF] text-white font-medium shadow-md shadow-[#5551FF]/20"
                       : "bg-indigo-50/90 text-foreground border border-indigo-100/80 dark:bg-zinc-800/90 dark:border-zinc-700/50",
                   )}
                 >
@@ -274,10 +275,14 @@ function ThreadPanel() {
 }
 
 /**
- * Sleek, Floating AI Command Dock (Cursor / Notion AI inspired).
+ * Sleek, Movable Floating AI Command Dock with Bluish Gradient Glow Shadow.
+ * Automatically minimizes if dragged out of or near the window boundaries.
  */
 export function AiComposer({ doc }: { doc: DocumentDetail }) {
   const queryClient = useQueryClient();
+  const dragControls = useDragControls();
+  const dockRef = useRef<HTMLDivElement>(null);
+
   const [tab, setTab] = useState<ComposerTab>("write");
   const [agent, setAgent] = useState<AgentId>("auto");
   const [prompt, setPrompt] = useState("");
@@ -295,6 +300,32 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
 
   const focusNonce = useComposerStore((s) => s.focusNonce);
   const push = useComposerStore((s) => s.push);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    dragControls.start(e);
+  };
+
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    if (!dockRef.current) return;
+    const rect = dockRef.current.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const margin = 30;
+
+    // Minimize if dragged near or outside window boundaries
+    if (
+      rect.left < margin ||
+      rect.right > windowWidth - margin ||
+      rect.top < margin ||
+      rect.bottom > windowHeight - margin ||
+      info.point.x < margin ||
+      info.point.x > windowWidth - margin ||
+      info.point.y < margin ||
+      info.point.y > windowHeight - margin
+    ) {
+      setMinimized(true);
+    }
+  };
 
   useEffect(() => {
     if (focusNonce > 0) {
@@ -358,6 +389,8 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
         );
         push("ai", `Updated "${activeSectionTitle ?? "section"}".`);
       }
+      void queryClient.invalidateQueries({ queryKey: ["document", doc.id] });
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
     onError: (err) => {
       const msg = err instanceof ApiClientError ? err.message : "Action failed";
@@ -408,9 +441,11 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
           onClick={() => setMinimized(false)}
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-indigo-500/30 bg-background/95 px-4 py-2.5 text-xs font-semibold text-foreground shadow-2xl shadow-indigo-500/20 backdrop-blur-2xl hover:border-[#5551FF] transition-all"
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.96 }}
+          className="pointer-events-auto flex items-center gap-2.5 rounded-full border-2 border-[#5551FF]/50 bg-background/95 px-4 py-2.5 text-xs font-semibold text-foreground shadow-[0_10px_35px_-5px_rgba(85,81,255,0.35)] backdrop-blur-2xl hover:border-[#5551FF] transition-all"
         >
-          <Sparkles className="h-4 w-4 text-[#5551FF] animate-pulse" />
+          <img src="/logo.jpg" alt="Logo" className="h-4 w-4 object-cover rounded-full shrink-0 shadow-xs" />
           <span>AI Assistant</span>
           {running && (
             <span className="flex items-center gap-1 text-[11px] text-[#5551FF]">
@@ -427,16 +462,25 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
   return (
     <div className="fixed inset-x-0 bottom-6 z-[100] flex justify-center px-4 pointer-events-none">
       <motion.div
+        ref={dockRef}
+        drag
+        dragControls={dragControls}
+        dragListener={false}
+        dragMomentum={false}
+        dragElastic={0.05}
+        onDragEnd={handleDragEnd}
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="pointer-events-auto w-full max-w-2xl"
+        className="pointer-events-auto w-full max-w-2xl cursor-default"
       >
         <ThreadPanel />
 
-        {/* Floating Command Dock Card */}
-        <div className="overflow-hidden rounded-2xl border border-indigo-500/30 bg-background/90 p-3 shadow-2xl shadow-indigo-500/10 backdrop-blur-2xl dark:border-indigo-500/40 dark:bg-zinc-950/90">
-          {/* Top header navigation */}
-          <div className="flex items-center justify-between pb-2">
+        {/* Floating Command Dock Card with Crisp Uniform Single-Color Outline */}
+        <div className="relative overflow-hidden rounded-2xl border-2 border-[#5551FF]/50 dark:border-[#5551FF]/70 bg-background/95 dark:bg-zinc-950/95 p-3.5 shadow-[0_20px_60px_-10px_rgba(85,81,255,0.3)] dark:shadow-[0_20px_60px_-10px_rgba(85,81,255,0.35)] backdrop-blur-2xl transition-all duration-300">
+
+
+          {/* Top Header Navigation & Drag Bar */}
+          <div className="flex items-center justify-between pb-2 select-none">
             <div className="flex items-center gap-1.5 bg-muted/40 p-0.5 rounded-xl border border-border/40">
               {TABS.map((t) => (
                 <button
@@ -444,7 +488,7 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
                   type="button"
                   onClick={() => setTab(t.id)}
                   className={cn(
-                    "rounded-lg px-3 py-1 text-xs font-semibold transition-all",
+                    "rounded-lg px-3 py-1 text-xs font-semibold transition-all duration-150",
                     tab === t.id
                       ? "bg-background text-foreground shadow-xs"
                       : "text-muted-foreground hover:text-foreground",
@@ -455,9 +499,18 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
               ))}
             </div>
 
+            {/* Drag Handle Area — Dragging is strictly triggered here via dragControls */}
+            <div
+              onPointerDown={handlePointerDown}
+              className="flex-1 flex items-center justify-center cursor-grab active:cursor-grabbing px-3 py-1 text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
+              title="Drag here to move panel"
+            >
+              <GripHorizontal className="h-4 w-4" />
+            </div>
+
             <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#5551FF] dark:bg-indigo-500/20 dark:text-indigo-300">
-                <Sparkles className="h-3 w-3" />
+              <span className="flex items-center gap-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-[#5551FF] dark:bg-indigo-500/20 dark:border-indigo-500/30 dark:text-indigo-300 shadow-xs">
+                <img src="/logo.jpg" alt="Logo" className="h-3.5 w-3.5 object-cover rounded-full shrink-0" />
                 Gemma 4
               </span>
               <button
@@ -498,15 +551,15 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
           </div>
 
           {/* Bottom Controls Row */}
-          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 pt-2">
-            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-x-auto">
+          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-border/40 pt-2.5">
+            <div className="flex items-center gap-2 min-w-0 flex-1 overflow-x-auto py-0.5">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     className="flex items-center gap-1.5 rounded-xl border border-border/60 bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground hover:border-[#5551FF] transition-all shadow-xs"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-[#5551FF]" />
+                    <img src="/logo.jpg" alt="Logo" className="h-3.5 w-3.5 object-cover rounded-full shrink-0" />
                     <span>{AGENTS.find((a) => a.id === agent)?.label ?? "Auto"}</span>
                     <ChevronDown className="h-3.5 w-3.5 opacity-50" />
                   </button>
@@ -521,14 +574,14 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
               </DropdownMenu>
 
               {activeSectionTitle ? (
-                <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#5551FF] px-2.5 py-1 text-xs font-medium text-white shadow-xs truncate max-w-[200px]">
+                <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#5551FF] px-2.5 py-1 text-xs font-medium text-white shadow-sm shadow-[#5551FF]/25 truncate max-w-[200px]">
                   <FileText className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{activeSectionTitle}</span>
                   <button
                     type="button"
                     aria-label="Clear section context"
                     onClick={clearSectionContext}
-                    className="rounded-full p-0.5 hover:bg-white/20"
+                    className="rounded-full p-0.5 transition-colors hover:bg-white/20"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -549,7 +602,7 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
               className={cn(
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
                 canSubmit
-                  ? "bg-[#5551FF] text-white shadow-md shadow-[#5551FF]/20 hover:scale-105 hover:bg-[#4540FF] active:scale-95"
+                  ? "bg-gradient-to-r from-[#5551FF] to-indigo-600 text-white shadow-md shadow-[#5551FF]/35 hover:scale-105 hover:shadow-lg hover:shadow-[#5551FF]/50 active:scale-95"
                   : "bg-muted/60 text-muted-foreground/40 cursor-not-allowed",
               )}
             >
@@ -565,3 +618,6 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
     </div>
   );
 }
+
+
+

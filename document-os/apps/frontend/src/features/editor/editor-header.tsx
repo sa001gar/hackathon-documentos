@@ -156,23 +156,35 @@ function SaveController() {
 
   return (
     <div className="flex items-center gap-2.5 shrink-0">
-      <div className="flex shrink-0 items-center gap-2 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium shadow-sm">
-        <Switch
-          id="auto-save-toggle"
-          checked={autoSaveEnabled}
-          onCheckedChange={(checked) => {
-            setAutoSaveEnabled(checked);
-            toast.info(checked ? "Auto-save enabled" : "Auto-save disabled");
-          }}
-          className="h-4 w-7 data-[state=checked]:bg-[#5551FF]"
-        />
-        <label
-          htmlFor="auto-save-toggle"
-          className="cursor-pointer text-xs font-semibold text-foreground select-none whitespace-nowrap shrink-0 hover:text-foreground"
+      <button
+        type="button"
+        onClick={() => {
+          const next = !autoSaveEnabled;
+          setAutoSaveEnabled(next);
+          toast.info(next ? "Auto-save enabled" : "Auto-save disabled");
+        }}
+        className={cn(
+          "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 shadow-xs select-none cursor-pointer",
+          autoSaveEnabled
+            ? "border-[#5551FF]/40 bg-[#5551FF]/10 text-[#5551FF] dark:bg-[#5551FF]/20 dark:text-indigo-300 dark:border-[#5551FF]/50"
+            : "border-border/80 bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
+        )}
+      >
+        <span
+          className={cn(
+            "relative flex h-4 w-7 items-center rounded-full p-0.5 transition-colors duration-200 shrink-0",
+            autoSaveEnabled ? "bg-[#5551FF]" : "bg-muted-foreground/30",
+          )}
         >
-          Auto-save
-        </label>
-      </div>
+          <span
+            className={cn(
+              "h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-200",
+              autoSaveEnabled ? "translate-x-3" : "translate-x-0",
+            )}
+          />
+        </span>
+        <span className="whitespace-nowrap">Auto-save</span>
+      </button>
 
       {!online || aggregate === "offline" ? (
         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">

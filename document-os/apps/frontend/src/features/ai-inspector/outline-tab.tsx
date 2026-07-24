@@ -63,6 +63,16 @@ export function OutlineTab({ documentId }: { documentId: string }) {
           {flat.map(({ node, depth }) => {
             const genStatus = genStatusById[node.id];
             const isCurrent = node.id === currentSectionId;
+            const hasContent = (node.word_count ?? 0) > 0 || Boolean(node.content && node.content.trim().length > 0);
+            const isCompleted =
+              genStatus === "completed" ||
+              node.status === "draft" ||
+              node.status === "validated" ||
+              node.status === "reviewed" ||
+              hasContent;
+            const isGenerating = genStatus === "generating" || node.status === "generating";
+            const isFailed = genStatus === "failed" || node.status === "error";
+
             return (
               <button
                 key={node.id}
@@ -73,26 +83,19 @@ export function OutlineTab({ documentId }: { documentId: string }) {
                   isCurrent && "bg-[#5551FF]/10 text-[#5551FF] font-semibold border-l-2 border-[#5551FF] rounded-r-lg shadow-sm",
                 )}
               >
-                {genStatus === "completed" ? (
-                  <Check className="h-3 w-3 shrink-0 text-emerald-500" />
-                ) : genStatus === "failed" ? (
-                  <XCircle className="h-3 w-3 shrink-0 text-destructive" />
-                ) : genStatus === "generating" ? (
+                {isGenerating ? (
                   <StatusDot
                     status="generating"
                     map={SECTION_DOT_COLORS}
                     pulse
                     className="h-1.5 w-1.5"
                   />
-                ) : genStatus === "queued" ? (
-                  <Clock className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+                ) : isCompleted ? (
+                  <Check className="h-3 w-3 shrink-0 text-emerald-500" />
+                ) : isFailed ? (
+                  <XCircle className="h-3 w-3 shrink-0 text-destructive" />
                 ) : (
-                  <StatusDot
-                    status={node.status}
-                    map={SECTION_DOT_COLORS}
-                    pulse={node.status === "generating"}
-                    className="h-1.5 w-1.5"
-                  />
+                  <Clock className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                 )}
                 <span
                   className={cn(
