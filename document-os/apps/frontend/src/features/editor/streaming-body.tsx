@@ -1,9 +1,9 @@
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useThrottledValue } from "@/hooks/use-throttled-value";
 import { useTypewriter } from "@/hooks/use-typewriter";
-import { countWords, markdownToHtmlFast } from "@/lib/markdown";
+import { markdownToHtmlFast } from "@/lib/markdown";
 
 /**
  * Shared rendered-prose container. After innerHTML is set, math spans
