@@ -1,5 +1,6 @@
 import type { RefineAction } from "@documentos/shared-types";
-import { useMutation } from "@tanstack/react-query";
+import { cn } from "@documentos/utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/core";
 import { BubbleMenu } from "@tiptap/react";
 import {
@@ -54,11 +55,13 @@ const ACTION_GROUPS: ToolbarAction[][] = [
 interface AiToolbarProps {
   editor: Editor;
   sectionId: string;
+  documentId?: string;
   /** Called after the AI edit is applied so the host can persist. */
   onApplied: () => void;
 }
 
-export function AiToolbar({ editor, sectionId, onApplied }: AiToolbarProps) {
+export function AiToolbar({ editor, sectionId, documentId, onApplied }: AiToolbarProps) {
+  const queryClient = useQueryClient();
   // Selection captured at click time so async replacement targets the right range.
   const selectionRef = useRef<{ from: number; to: number; text: string } | null>(null);
   const [translateOpen, setTranslateOpen] = useState(false);
@@ -82,6 +85,11 @@ export function AiToolbar({ editor, sectionId, onApplied }: AiToolbarProps) {
         vars.action === "continue" ? { from: sel.to, to: sel.to } : { from: sel.from, to: sel.to };
       editor.chain().focus().insertContentAt(range, data.refined_text).run();
       onApplied();
+      if (documentId) {
+        void queryClient.invalidateQueries({ queryKey: ["document", documentId] });
+        void queryClient.invalidateQueries({ queryKey: ["documents"] });
+      }
+      toast.success(`AI "${vars.action.replace("_", " ")}" applied`);
     },
     onError: (err) =>
       toast.error(err instanceof ApiClientError ? err.message : "AI refine failed"),
@@ -119,83 +127,110 @@ export function AiToolbar({ editor, sectionId, onApplied }: AiToolbarProps) {
       }}
     >
       <div
-        className="flex max-w-[520px] flex-wrap items-center gap-0.5 rounded-lg border border-border bg-popover p-1 shadow-xl"
+        className="flex max-w-[540px] flex-col overflow-hidden rounded-2xl border-2 border-[#5551FF]/50 bg-popover/95 p-1.5 shadow-[0_15px_40px_-5px_rgba(85,81,255,0.25)] backdrop-blur-2xl dark:border-[#5551FF]/70"
         onMouseDown={(e) => e.preventDefault()}
       >
-        {ACTION_GROUPS.map((group, gi) => (
-          <div key={gi} className="flex items-center gap-0.5">
-            {gi > 0 && <span className="mx-1 h-4 w-px bg-border" aria-hidden />}
-            {group.map(({ action, label, icon: Icon }) => {
-              const pending = mutation.isPending && mutation.variables?.action === action;
-              return (
-                <Button
-                  key={action}
-                  size="xs"
-                  variant="ghost"
-                  disabled={mutation.isPending}
-                  onClick={() => run(action)}
-                >
-                  {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
-                  {label}
-                </Button>
-              );
-            })}
-            {gi === ACTION_GROUPS.length - 1 && (
-              <Popover open={translateOpen} onOpenChange={setTranslateOpen}>
-                <PopoverTrigger asChild>
+        <div className="flex flex-wrap items-center gap-0.5">
+          {ACTION_GROUPS.map((group, gi) => (
+            <div key={gi} className="flex items-center gap-0.5">
+              {gi > 0 && <span className="mx-1 h-4 w-px bg-border/60" aria-hidden />}
+              {group.map(({ action, label, icon: Icon }) => {
+                const pending = mutation.isPending && mutation.variables?.action === action;
+                return (
                   <Button
+                    key={action}
                     size="xs"
                     variant="ghost"
                     disabled={mutation.isPending}
-                    onClick={() => captureSelection()}
-                  >
-                    {mutation.isPending && mutation.variables?.action === "translate" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Languages className="h-3.5 w-3.5" />
+                    onClick={() => run(action)}
+                    className={cn(
+                      "transition-all duration-150",
+                      pending && "bg-[#5551FF]/15 text-[#5551FF] border border-[#5551FF]/40 font-semibold shadow-xs dark:bg-indigo-500/25 dark:text-indigo-300",
                     )}
-                    Translate
+                  >
+                    {pending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#5551FF]" />
+                    ) : (
+                      <Icon className="h-3.5 w-3.5" />
+                    )}
+                    {label}
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-52" align="start">
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium">Translate selection into</p>
-                    <Input
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && language.trim()) {
-                          setTranslateOpen(false);
-                          run("translate", `Translate to ${language.trim()}`);
-                        }
-                      }}
-                      placeholder="Language"
-                      className="h-8 text-xs"
-                    />
+                );
+              })}
+              {gi === ACTION_GROUPS.length - 1 && (
+                <Popover open={translateOpen} onOpenChange={setTranslateOpen}>
+                  <PopoverTrigger asChild>
                     <Button
-                      size="sm"
-                      className="w-full"
-                      disabled={!language.trim() || mutation.isPending}
-                      onClick={() => {
-                        setTranslateOpen(false);
-                        run("translate", `Translate to ${language.trim()}`);
-                      }}
+                      size="xs"
+                      variant="ghost"
+                      disabled={mutation.isPending}
+                      onClick={() => captureSelection()}
+                      className={cn(
+                        mutation.isPending && mutation.variables?.action === "translate" && "bg-[#5551FF]/15 text-[#5551FF] font-semibold",
+                      )}
                     >
-                      {mutation.isPending && mutation.variables?.action === "translate" && (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                      {mutation.isPending && mutation.variables?.action === "translate" ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#5551FF]" />
+                      ) : (
+                        <Languages className="h-3.5 w-3.5" />
                       )}
                       Translate
                     </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-        ))}
+                  </PopoverTrigger>
+                  <PopoverContent className="w-52" align="start">
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium">Translate selection into</p>
+                      <Input
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && language.trim()) {
+                            setTranslateOpen(false);
+                            run("translate", `Translate to ${language.trim()}`);
+                          }
+                        }}
+                        placeholder="Language"
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={!language.trim() || mutation.isPending}
+                        onClick={() => {
+                          setTranslateOpen(false);
+                          run("translate", `Translate to ${language.trim()}`);
+                        }}
+                      >
+                        {mutation.isPending && mutation.variables?.action === "translate" && (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        )}
+                        Translate
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          ))}
+          {mutation.isPending && (
+            <Wand2 className="ml-1 h-3.5 w-3.5 animate-pulse text-[#5551FF]" aria-hidden />
+          )}
+        </div>
+
+        {/* Live Progression Banner during processing */}
         {mutation.isPending && (
-          <Wand2 className="ml-1 h-3.5 w-3.5 animate-pulse text-primary" aria-hidden />
+          <div className="mt-1 flex w-full items-center justify-between gap-2 border-t border-indigo-500/20 bg-indigo-50/90 dark:bg-indigo-950/80 px-2.5 py-1 text-[11px] font-semibold text-[#5551FF] dark:text-indigo-300 rounded-b-lg">
+            <span className="flex items-center gap-1.5 truncate">
+              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 text-[#5551FF]" />
+              <span className="truncate">
+                AI processing: <span className="capitalize">{mutation.variables?.action.replace("_", " ") ?? "refining"}</span>…
+              </span>
+            </span>
+            <span className="flex h-2 w-2 shrink-0 rounded-full bg-[#5551FF] animate-ping" />
+          </div>
         )}
       </div>
     </BubbleMenu>
   );
 }
+

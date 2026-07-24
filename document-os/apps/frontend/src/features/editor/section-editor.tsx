@@ -1,4 +1,5 @@
 import type { Section } from "@documentos/shared-types";
+import { cn } from "@documentos/utils";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { CloudOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -87,6 +88,8 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
     // Only on mount / section change.
   }, [section.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [aiUpdated, setAiUpdated] = useState(false);
+
   const persistNow = () => {
     if (!editor || editor.isDestroyed) return;
     const md = htmlToMarkdown(editor.getHTML());
@@ -94,8 +97,19 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
     saveRef.current(md);
   };
 
+  const handleAiApplied = () => {
+    persistNow();
+    setAiUpdated(true);
+    setTimeout(() => setAiUpdated(false), 2200);
+  };
+
   return (
-    <div className="relative">
+    <div
+      className={cn(
+        "relative rounded-xl transition-all duration-500",
+        aiUpdated && "ring-2 ring-[#5551FF]/80 bg-[#5551FF]/5 dark:bg-[#5551FF]/15 shadow-[0_0_25px_rgba(85,81,255,0.3)] animate-pulse",
+      )}
+    >
       {draft && (
         <div className="mb-2 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
           <CloudOff className="h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -130,7 +144,7 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
       )}
       <EditorContent editor={editor} className="docos-editor" />
       {editor && !editor.isDestroyed && (
-        <AiToolbar editor={editor} sectionId={section.id} onApplied={persistNow} />
+        <AiToolbar editor={editor} sectionId={section.id} documentId={documentId} onApplied={handleAiApplied} />
       )}
     </div>
   );
