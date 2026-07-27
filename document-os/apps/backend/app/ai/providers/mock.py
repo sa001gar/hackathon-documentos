@@ -137,6 +137,19 @@ In summary, {topic} is treated as a first-class concern throughout {doc}, and th
         if action == "translate":
             lang = _field(user, "TARGET LANGUAGE", "English")
             return f"[{lang}] {text}"
+        if action == "explain":
+            sentences = re.split(r"(?<=[.!?])\s+", text)
+            key_concepts = [s.strip() for s in sentences[:5] if s.strip()]
+            explanation = "## Detailed Explanation\n\n"
+            for i, concept in enumerate(key_concepts, 1):
+                explanation += f"**{i}.** {concept}\n\n"
+            explanation += (
+                "This section covers the core ideas above in a structured way. "
+                "Each point builds on the previous one to form a coherent understanding "
+                "of the topic. In practice, teams should review these concepts carefully "
+                "and adapt them to their specific context."
+            )
+            return explanation
         register = {
             "professional": "From a professional standpoint",
             "friendly": "Here's the friendly version",

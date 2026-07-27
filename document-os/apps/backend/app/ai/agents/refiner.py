@@ -33,7 +33,13 @@ class RefinerAgent(BaseAgent):
                 selected_text,
                 "TEXT END",
                 "",
-                "Return ONLY the transformed text.",
+                (
+                    "Explain the above content in detail. Break down complex concepts, "
+                    "provide examples where relevant, and clarify any ambiguous points. "
+                    "Return the explanation as well-structured Markdown."
+                    if action is RefineAction.explain
+                    else "Return ONLY the transformed text."
+                ),
             ]
         )
         return await self.run(

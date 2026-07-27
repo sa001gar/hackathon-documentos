@@ -27,6 +27,7 @@ class RefineAction(str, Enum):
     summarize = "summarize"
     continue_writing = "continue"
     translate = "translate"
+    explain = "explain"
 
 
 class RefineRequest(BaseModel):

@@ -63,6 +63,7 @@ const SECTION_INTENTS: [RegExp, RefineAction][] = [
   [/\b(summarize|summary|tl;dr)\b/i, "summarize"],
   [/\b(continue|keep writing)\b/i, "continue"],
   [/\btranslate\b/i, "translate"],
+  [/\b(explain|clarify|describe in detail)\b/i, "explain"],
 ];
 
 const REGENERATE_RE = /\b(regenerate|re-?write (the|this) section)\b/i;

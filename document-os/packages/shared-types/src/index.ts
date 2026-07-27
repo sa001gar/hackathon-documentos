@@ -167,7 +167,8 @@ export type RefineAction =
   | "fix_grammar"
   | "summarize"
   | "continue"
-  | "translate";
+  | "translate"
+  | "explain";
 
 export interface RefineResponse {
   refined_text: string;
