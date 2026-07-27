@@ -77,6 +77,7 @@ export interface DocumentSummary {
   title: string;
   description: string | null;
   status: DocumentStatus;
+  is_public: boolean;
   section_count: number;
   word_count: number;
   created_by: string;

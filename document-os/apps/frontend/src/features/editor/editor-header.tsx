@@ -6,8 +6,12 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  Copy,
+  ExternalLink,
+  Globe,
   Loader2,
   PanelRight,
+  Share2,
   WifiOff,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -21,6 +25,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOnline } from "@/hooks/use-online";
@@ -28,6 +34,127 @@ import { ApiClientError, documentApi } from "@/lib/api-client";
 import { useUiStore } from "@/lib/ui-store";
 import { useEditorStore } from "./editor-store";
 import { ExportMenu } from "./export-menu";
+
+function ShareMenu({ doc }: { doc: DocumentDetail }) {
+  const queryClient = useQueryClient();
+  const [copied, setCopied] = useState(false);
+  const isPublic = doc.is_public ?? false;
+
+  const shareUrl = `${window.location.origin}/share/${doc.id}`;
+
+  const togglePublic = useMutation({
+    mutationFn: (nextPublic: boolean) => documentApi.update(doc.id, { is_public: nextPublic }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<DocumentDetail>(["document", doc.id], (old) =>
+        old ? { ...old, is_public: updated.is_public } : old,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
+      toast.success(updated.is_public ? "Document is now publicly accessible!" : "Public access disabled");
+    },
+    onError: (err) => {
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to update share settings");
+    },
+  });
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true);
+      toast.success("Public link copied to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all cursor-pointer shadow-xs select-none",
+            isPublic
+              ? "border-emerald-300/90 dark:border-emerald-700/80 bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
+              : "border-indigo-200/80 dark:border-indigo-800/80 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 hover:border-[#5551FF] hover:bg-indigo-100/90 dark:hover:bg-indigo-900/60",
+          )}
+        >
+          <Share2 className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">{isPublic ? "Public" : "Share"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="z-[110] w-84 rounded-2xl border border-indigo-200/80 dark:border-indigo-900/70 bg-popover/95 p-4 shadow-2xl backdrop-blur-md"
+      >
+        <div className="space-y-3.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <div
+                className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors mt-0.5",
+                  isPublic
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                <Globe className="h-4 w-4" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-xs font-semibold text-foreground">Public Link Sharing</p>
+                <p className="text-[11px] text-muted-foreground/80 leading-snug">
+                  Allow anyone with the link to view and export this document without signing in.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={isPublic}
+              onCheckedChange={(val) => togglePublic.mutate(val)}
+              disabled={togglePublic.isPending}
+            />
+          </div>
+
+          {isPublic ? (
+            <div className="space-y-2.5 pt-3 border-t border-border/60">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  readOnly
+                  value={shareUrl}
+                  className="h-8.5 text-[11px] font-mono text-muted-foreground bg-muted/40 border-indigo-200/50 dark:border-indigo-900/40 rounded-xl"
+                />
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  onClick={handleCopy}
+                  title="Copy public link"
+                  className="rounded-xl shrink-0"
+                >
+                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => window.open(shareUrl, "_blank")}
+                  title="Open public view page"
+                  className="rounded-xl shrink-0"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-950/30 px-2.5 py-1 text-[10.5px] font-medium text-emerald-700 dark:text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Live • Anonymous visitors can view & export (MD/PDF/HTML/JSON).</span>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-muted/40 p-2.5 text-[10.5px] text-muted-foreground flex items-center gap-2 border border-border/40">
+              <span className="text-sm">🔒</span>
+              <span>Private document. Only authorized members of this workspace can view or edit.</span>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function TitleInput({ doc }: { doc: DocumentDetail }) {
   const queryClient = useQueryClient();
@@ -246,6 +373,7 @@ export function EditorHeader({ doc }: { doc: DocumentDetail }) {
 
         <div className="mx-1 h-4 w-px bg-border/60" aria-hidden />
 
+        <ShareMenu doc={doc} />
         <ExportMenu documentId={doc.id} title={doc.title} />
 
         <Tooltip>

@@ -1,6 +1,7 @@
 import { cn } from "@documentos/utils";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import {
+  AlertTriangle,
   ArrowLeftRight,
   Check,
   ChevronDown,
@@ -12,8 +13,10 @@ import {
   Maximize2,
   MousePointerClick,
   Pencil,
+  RotateCcw,
   Sparkles,
   Trash2,
+  Wand2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -39,23 +42,63 @@ import { useTheme } from "@/hooks/use-theme";
 
 let mermaidSeq = 0;
 
+/** Auto-fixes common Mermaid syntax errors (e.g. unquoted labels containing special characters like ( ) * + - /) */
+export function autoFixMermaidSyntax(code: string): string {
+  let fixed = code;
+
+  // 1. Fix unquoted square node labels: e.g. A[factorial(3)] -> A["factorial(3)"], B[3 * factorial(2)] -> B["3 * factorial(2)"]
+  fixed = fixed.replace(/([A-Za-z0-9_]+)\[([^\]\n"]+)\]/g, (match, id, text) => {
+    if (/[\(\)\*\+\/\-=,]/.test(text)) {
+      return `${id}["${text.trim()}"]`;
+    }
+    return match;
+  });
+
+  // 2. Fix unquoted round node labels: e.g. A(factorial(3)) -> A("factorial(3)")
+  fixed = fixed.replace(/([A-Za-z0-9_]+)\(([^)\n"]+)\)/g, (match, id, text) => {
+    if (/[\(\)\*\+\/\-=,]/.test(text)) {
+      return `${id}("${text.trim()}")`;
+    }
+    return match;
+  });
+
+  // 3. Fallback: if special chars present without quotes, quote all brackets
+  if (fixed === code && /[\(\)\*]/.test(code) && !code.includes('"')) {
+    fixed = code
+      .split("\n")
+      .map((line) => {
+        return line.replace(/\[([^\]"]+)\]/g, '["$1"]').replace(/\(([^)"]+)\)/g, '("$1")');
+      })
+      .join("\n");
+  }
+
+  return fixed;
+}
+
 /** Renders a mermaid source string as an SVG diagram with interactive clickable node support. */
 export function MermaidDiagram({
   code,
   className,
   onNodeClick,
   onDiagramClick,
+  onRetry,
+  onFixSyntax,
+  onEditSource,
 }: {
   code: string;
   className?: string;
   onNodeClick?: (nodeText: string) => void;
   onDiagramClick?: () => void;
+  onRetry?: () => void;
+  onFixSyntax?: (fixedCode: string) => void;
+  onEditSource?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const debounced = useDebouncedValue(code, 500);
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const idRef = useRef(`docos-mmd-${++mermaidSeq}`);
 
   useEffect(() => {
@@ -98,7 +141,7 @@ export function MermaidDiagram({
     return () => {
       cancelled = true;
     };
-  }, [debounced, resolvedTheme]);
+  }, [debounced, resolvedTheme, retryNonce]);
 
   // Attach interactive click handlers to SVG nodes
   useEffect(() => {
@@ -129,8 +172,66 @@ export function MermaidDiagram({
   if (!debounced.trim()) return null;
   if (error) {
     return (
-      <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-        <span className="font-medium">Mermaid error:</span> {error}
+      <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3.5 text-xs text-destructive backdrop-blur-xs space-y-2.5">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <span className="font-semibold">Mermaid Syntax Error:</span>{" "}
+            <span className="opacity-90 leading-relaxed break-words">{error}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-destructive/20">
+          {onFixSyntax && (
+            <Button
+              type="button"
+              size="xs"
+              variant="default"
+              onClick={(e) => {
+                e.stopPropagation();
+                const fixed = autoFixMermaidSyntax(code);
+                onFixSyntax(fixed);
+                toast.success("Applied syntax fix to Mermaid diagram!");
+              }}
+              className="gap-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground font-medium"
+            >
+              <Wand2 className="h-3 w-3" />
+              Fix Syntax Error
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              setError(null);
+              setRetryNonce((n) => n + 1);
+              if (onRetry) onRetry();
+            }}
+            className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/15"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Retry Rendering
+          </Button>
+
+          {onEditSource && (
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditSource();
+              }}
+              className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/15 ml-auto"
+            >
+              <Code2 className="h-3 w-3" />
+              Edit Source Code
+            </Button>
+          )}
+        </div>
       </div>
     );
   }
@@ -390,6 +491,10 @@ export function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeVi
               setNodeModalOpen(true);
             }}
             onDiagramClick={() => setEditing((v) => !v)}
+            onEditSource={() => setEditing(true)}
+            onFixSyntax={(fixedCode) => {
+              updateNodeContent(editor, getPos, node, fixedCode);
+            }}
           />
         </div>
 

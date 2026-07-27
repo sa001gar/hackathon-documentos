@@ -72,10 +72,12 @@ Project = { id: string; workspace_id: string; name: string; description: string 
 | GET | `/projects/{pid}/documents` | — | `DocumentSummary[]` |
 | POST | `/projects/{pid}/documents` | `{title, description?, template_id?}` | `201 DocumentDetail` |
 | GET | `/documents/{id}` | — | `DocumentDetail` |
-| PATCH | `/documents/{id}` | `{title?, description?, status?}` | `DocumentSummary` |
+| PATCH | `/documents/{id}` | `{title?, description?, status?, is_public?}` | `DocumentSummary` |
 | DELETE | `/documents/{id}` | — | `204` |
 | GET | `/documents/{id}/markdown` | — | `{markdown: string}` (full doc, headings by depth) |
 | GET | `/documents/{id}/activity` | — | `ActivityEntry[]` |
+| GET (public) | `/public/documents/{id}` | — | `DocumentDetail` (if is_public is true) |
+| GET (public) | `/public/documents/{id}/markdown` | — | `{markdown: string}` (if is_public is true) |
 
 Creating with `template_id` materializes the template tree as sections (status `pending`).
 
@@ -83,6 +85,7 @@ Creating with `template_id` materializes the template tree as sections (status `
 DocumentSummary = { id: string; project_id: string; template_id: string | null;
   title: string; description: string | null;
   status: "draft"|"generating"|"generated"|"validated"|"reviewed"|"exported";
+  is_public: boolean;
   section_count: number; word_count: number;
   created_by: string; created_at: string; updated_at: string }
 DocumentDetail = DocumentSummary & { sections: Section[] }   // flat, ordered (parent_id, order_index)

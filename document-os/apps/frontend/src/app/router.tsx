@@ -5,6 +5,7 @@ import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { EditorPage } from "@/features/editor/editor-page";
 import { NotFoundPage } from "@/features/not-found";
 import { TemplatesPage } from "@/features/templates/templates-page";
+import { PublicDocumentPage } from "@/features/public/public-document-page";
 import { useAuthStore } from "@/lib/auth-store";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,7 @@ function ShellLayout() {
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="/share/:documentId" element={<PublicDocumentPage />} />
       <Route
         path="/login"
         element={

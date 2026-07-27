@@ -18,6 +18,7 @@ class DocumentUpdate(BaseModel):
         default=None,
         pattern="^(draft|generating|generated|validated|reviewed|exported)$",
     )
+    is_public: bool | None = None
 
 
 class DocumentSummary(BaseModel):
@@ -29,6 +30,7 @@ class DocumentSummary(BaseModel):
     title: str
     description: str | None
     status: str
+    is_public: bool = False
     section_count: int = 0
     word_count: int = 0
     created_by: str

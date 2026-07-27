@@ -214,11 +214,13 @@ export const documentApi = {
   create: (projectId: string, body: { title: string; description?: string; template_id?: string }) =>
     request<DocumentDetail>(`/projects/${projectId}/documents`, { body }),
   get: (id: string) => request<DocumentDetail>(`/documents/${id}`),
-  update: (id: string, body: { title?: string; description?: string; status?: DocumentStatus }) =>
+  update: (id: string, body: { title?: string; description?: string; status?: DocumentStatus; is_public?: boolean }) =>
     request<DocumentSummary>(`/documents/${id}`, { method: "PATCH", body }),
   remove: (id: string) => request<void>(`/documents/${id}`, { method: "DELETE" }),
   markdown: (id: string) => request<{ markdown: string }>(`/documents/${id}/markdown`),
   activity: (id: string) => request<ActivityEntry[]>(`/documents/${id}/activity`),
+  publicGet: (id: string) => request<DocumentDetail>(`/public/documents/${id}`, { public: true }),
+  publicMarkdown: (id: string) => request<{ markdown: string }>(`/public/documents/${id}/markdown`, { public: true }),
 };
 
 export const sectionApi = {

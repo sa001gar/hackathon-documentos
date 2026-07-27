@@ -15,6 +15,8 @@ from app.schemas.document import (
 )
 from app.services import activity_service, document_service, project_service, workspace_service
 
+from app.core.errors import NotFoundError
+
 router = APIRouter()
 
 
@@ -27,6 +29,7 @@ def _summary(db: Session, document: Document) -> DocumentSummary:
         title=document.title,
         description=document.description,
         status=document.status,
+        is_public=getattr(document, "is_public", False),
         section_count=count,
         word_count=words,
         created_by=document.created_by,
@@ -136,3 +139,25 @@ def get_document_activity(
         )
         for log in logs
     ]
+
+
+@router.get("/public/documents/{document_id}", response_model=DocumentDetail)
+def get_public_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    document = document_service.get(db, document_id)
+    if not getattr(document, "is_public", False):
+        raise NotFoundError("Public document not found or access is restricted")
+    return _detail(db, document)
+
+
+@router.get("/public/documents/{document_id}/markdown", response_model=MarkdownResponse)
+def get_public_document_markdown(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    document = document_service.get(db, document_id)
+    if not getattr(document, "is_public", False):
+        raise NotFoundError("Public document not found or access is restricted")
+    return MarkdownResponse(markdown=document_service.full_markdown(db, document_id))

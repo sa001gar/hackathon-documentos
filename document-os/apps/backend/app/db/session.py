@@ -36,7 +36,17 @@ def get_db():
         db.close()
 
 
+from sqlalchemy import create_engine, event, text
+
 def init_db() -> None:
     from app import models  # noqa: F401  (register tables)
 
     Base.metadata.create_all(bind=engine)
+
+    if _is_sqlite:
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN is_public BOOLEAN DEFAULT 0 NOT NULL"))
+                conn.commit()
+            except Exception:
+                pass
