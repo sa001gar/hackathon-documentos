@@ -29,5 +29,6 @@ class MemoryItem(UUIDPrimaryKey, Base):
 
     __table_args__ = (
         Index("ix_memory_scope_lookup", "scope", "scope_id", "category"),
+        Index("ix_memory_scope_key", "scope", "scope_id", "key"),
         UniqueConstraint("scope", "scope_id", "key", name="uq_memory_key"),
     )

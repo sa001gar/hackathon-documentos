@@ -265,3 +265,123 @@ export type StreamEvent =
 export interface ApiError {
   error: { code: string; detail: string };
 }
+
+// ---------- Knowledge Graph ----------
+export interface KGNode {
+  id: string;
+  label: string;
+  node_type: string;
+  source_id: string | null;
+  workspace_id: string | null;
+  project_id: string | null;
+  document_id: string | null;
+  properties: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KGEdge {
+  id: string;
+  source_id: string;
+  target_id: string;
+  relationship: string;
+  properties: Record<string, unknown>;
+  weight: number;
+  created_at: string;
+}
+
+export interface ImpactPath {
+  source: KGNode;
+  target: KGNode;
+  relationship: string;
+  weight: number;
+  path: string[];
+}
+
+export interface ImpactAnalysis {
+  node: KGNode;
+  incoming: ImpactPath[];
+  outgoing: ImpactPath[];
+}
+
+// ---------- Memory ----------
+export interface MemoryItem {
+  id: string;
+  scope: string;
+  scope_id: string;
+  key: string;
+  value: Record<string, unknown>;
+  content: string;
+  category: string;
+  source: string;
+  confidence: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------- Decisions ----------
+export interface Decision {
+  id: string;
+  title: string;
+  status: "proposed" | "approved" | "rejected" | "deprecated" | "superseded";
+  context: string;
+  decision: string;
+  rationale: string;
+  consequences: string;
+  alternatives: Record<string, unknown>[];
+  trade_offs: Record<string, unknown>[];
+  risks: Record<string, unknown>[];
+  impact: Record<string, unknown>;
+  assumptions: string[];
+  tags: string[];
+  document_id: string | null;
+  project_id: string | null;
+  workspace_id: string | null;
+  created_by: string;
+  superseded_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------- Health Score ----------
+export interface HealthScore {
+  overall_score: number;
+  grade: string;
+  metrics: Record<string, { score: number; value: number; total?: number }>;
+  recommendations: string[];
+}
+
+// ---------- Organization Brain ----------
+export interface BrainAnswer {
+  answer: string;
+  sources: Record<string, unknown>[];
+  node?: { id: string; label: string; type: string };
+  related?: string[];
+}
+
+// ---------- Orchestration ----------
+export interface OrchestrationResult {
+  status: string;
+  generated_content: string;
+  intent: string;
+  plan: Record<string, unknown>;
+  confidence: number;
+  sources: Record<string, unknown>[];
+  assumptions: string[];
+  review: Record<string, unknown>;
+  compliance: Record<string, unknown>;
+  security: Record<string, unknown>;
+  fact_check: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  error?: string;
+}
+
+export interface Specialist {
+  name: string;
+  display_name: string;
+  description: string;
+  capabilities: { name: string; description: string }[];
+  tools: string[];
+  responsibilities: string[];
+  icon: string;
+}

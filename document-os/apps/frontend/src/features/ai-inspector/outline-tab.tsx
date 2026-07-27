@@ -38,7 +38,7 @@ export function OutlineTab({ documentId }: { documentId: string }) {
   }
 
   return (
-    <div className="p-2">
+    <div className="p-2 h-full overflow-y-auto custom-scrollbar">
       {active && (
         <div className="mb-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
           <div className="mb-1.5 flex items-center justify-between text-xs">

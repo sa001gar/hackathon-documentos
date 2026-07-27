@@ -79,7 +79,7 @@ export function PromptsTab({ documentId }: { documentId: string }) {
   const totalUserPrompts = documentThread.filter((m) => m.role === "user").length;
 
   return (
-    <div className="space-y-4 p-3">
+    <div className="space-y-4 p-3 h-full overflow-y-auto custom-scrollbar">
       {/* Header & Filter Controls */}
       <div className="flex items-center justify-between border-b border-border/50 pb-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

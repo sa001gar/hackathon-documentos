@@ -3,7 +3,7 @@ import type { Editor } from "@tiptap/core";
 import { create } from "zustand";
 import type { SaveState } from "@/hooks/use-autosave";
 
-export type InspectorTab = "outline" | "prompts" | "review";
+export type InspectorTab = "outline" | "prompts" | "review" | "knowledge" | "health" | "brain" | "decisions" | "memory";
 export type EditorAction = "export";
 
 interface SectionSaveInfo {

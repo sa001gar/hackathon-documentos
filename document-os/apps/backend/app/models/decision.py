@@ -37,6 +37,6 @@ class Decision(UUIDPrimaryKey, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     __table_args__ = (
-        Index("ix_decisions_project", "project_id"),
-        Index("ix_decisions_tags", "tags", postgresql_using="gin"),
+        Index("ix_decisions_ws_created", "workspace_id", "created_at"),
+        Index("ix_decisions_project_created", "project_id", "created_at"),
     )

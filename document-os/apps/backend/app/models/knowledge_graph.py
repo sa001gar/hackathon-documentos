@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
 from app.models.base import UUIDPrimaryKey, utcnow
@@ -36,6 +36,7 @@ class KGNode(UUIDPrimaryKey, Base):
     __table_args__ = (
         Index("ix_kg_nodes_type_source", "node_type", "source_id"),
         Index("ix_kg_nodes_workspace_type", "workspace_id", "node_type"),
+        Index("ix_kg_nodes_ws_type_date", "workspace_id", "node_type", "created_at"),
     )
 
 
@@ -48,9 +49,6 @@ class KGEdge(UUIDPrimaryKey, Base):
     properties: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     weight: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
-
-    source = relationship("KGNode", foreign_keys=[source_id], lazy="joined")
-    target = relationship("KGNode", foreign_keys=[target_id], lazy="joined")
 
     __table_args__ = (
         Index("ix_kg_edges_source_rel", "source_id", "relationship"),

@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
+  Brain,
   ClipboardCheck,
   Download,
   FilePlus2,
@@ -9,8 +10,14 @@ import {
   LayoutTemplate,
   ListTree,
   Loader2,
+  Network,
   ShieldCheck,
   SunMoon,
+  Route,
+  BookOpen,
+  Activity,
+  Sparkles,
+  Search as SearchIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -27,7 +34,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useDebouncedValue } from "@/hooks/use-debounce";
 import { useTheme } from "@/hooks/use-theme";
-import { searchApi } from "@/lib/api-client";
+import { brainApi, healthScoreApi, kgApi, orchestrateApi, searchApi } from "@/lib/api-client";
 import { useUiStore } from "@/lib/ui-store";
 import { useEditorStore } from "@/features/editor/editor-store";
 import { useCurrentWorkspace } from "@/features/navigation/use-current-workspace";
@@ -224,6 +231,66 @@ export function CommandPalette() {
                 </CommandItem>
               )}
             </CommandGroup>
+
+            {actionVisible("ask brain") && (
+              <CommandGroup heading="AI Commands">
+                <CommandItem
+                  value="ai-brain"
+                  onSelect={run(() => {
+                    navigate("/");
+                    setTimeout(() => useUiStore.getState().setPaletteOpen(true), 100);
+                  })}
+                >
+                  <Brain className="h-4 w-4 text-purple-500" />
+                  Ask organization brain
+                </CommandItem>
+                <CommandItem
+                  value="ai-knowledge-graph"
+                  onSelect={run(() => {
+                    useEditorStore.getState().setInspectorTab("knowledge");
+                  })}
+                >
+                  <Network className="h-4 w-4 text-blue-500" />
+                  Explore knowledge graph
+                </CommandItem>
+                <CommandItem
+                  value="ai-health"
+                  onSelect={run(() => {
+                    useEditorStore.getState().setInspectorTab("health");
+                  })}
+                >
+                  <Activity className="h-4 w-4 text-green-500" />
+                  View knowledge health score
+                </CommandItem>
+                <CommandItem
+                  value="ai-decisions"
+                  onSelect={run(() => {
+                    useEditorStore.getState().setInspectorTab("decisions");
+                  })}
+                >
+                  <BookOpen className="h-4 w-4 text-amber-500" />
+                  Browse decision log
+                </CommandItem>
+                <CommandItem
+                  value="ai-impact"
+                  onSelect={run(() => {
+                    useEditorStore.getState().setInspectorTab("knowledge");
+                  })}
+                >
+                  <Route className="h-4 w-4 text-orange-500" />
+                  Run impact analysis
+                </CommandItem>
+                <CommandItem
+                  value="ai-orchestrate"
+                  onSelect={run(() => {
+                    navigate("/");
+                  })}
+                >
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  AI orchestration workflow
+                </CommandItem>
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </DialogContent>

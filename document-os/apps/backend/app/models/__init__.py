@@ -8,6 +8,9 @@ from app.models.version import DocumentVersion
 from app.models.template import Template
 from app.models.ai import AIPrompt, AILog, GenerationJob
 from app.models.export import Export
+from app.models.knowledge_graph import KGNode, KGEdge
+from app.models.memory import MemoryItem
+from app.models.decision import Decision
 
 __all__ = [
     "User",
@@ -22,4 +25,8 @@ __all__ = [
     "AILog",
     "GenerationJob",
     "Export",
+    "KGNode",
+    "KGEdge",
+    "MemoryItem",
+    "Decision",
 ]

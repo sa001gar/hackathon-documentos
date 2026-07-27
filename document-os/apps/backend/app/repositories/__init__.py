@@ -23,6 +23,9 @@ from app.repositories.template import TemplateRepository
 from app.repositories.user import UserRepository, UserSettingsRepository
 from app.repositories.version import VersionRepository
 from app.repositories.workspace import WorkspaceRepository
+from app.repositories.knowledge_graph import KGNodeRepository, KGEdgeRepository, kg_node_repo, kg_edge_repo
+from app.repositories.memory import MemoryRepository, memory_repo
+from app.repositories.decision import DecisionRepository, decision_repo
 
 user_repo = UserRepository(User)
 user_settings_repo = UserSettingsRepository(UserSettings)
@@ -43,7 +46,10 @@ __all__ = [
     "ProjectRepository", "DocumentRepository", "SectionRepository",
     "VersionRepository", "TemplateRepository", "AIPromptRepository",
     "AILogRepository", "GenerationJobRepository", "ExportRepository",
+    "KGNodeRepository", "KGEdgeRepository",
+    "MemoryRepository", "DecisionRepository",
     "user_repo", "user_settings_repo", "workspace_repo", "project_repo",
     "document_repo", "section_repo", "version_repo", "template_repo",
     "ai_prompt_repo", "ai_log_repo", "generation_job_repo", "export_repo",
+    "kg_node_repo", "kg_edge_repo", "memory_repo", "decision_repo",
 ]

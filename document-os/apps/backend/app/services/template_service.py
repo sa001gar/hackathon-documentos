@@ -313,7 +313,16 @@ def create(db: Session, data: TemplateCreate) -> Template:
 
 
 def seed_builtin_templates(db: Session) -> None:
-    """Insert the builtin template catalog; idempotent (skips existing builtins)."""
+    """Insert the builtin template catalog; idempotent (skips if any exist).
+
+    Fast-path: counts builtin templates in one query instead of N lookups.
+    """
+    from sqlalchemy import func, select
+
+    count = db.scalar(select(func.count(Template.id)).where(Template.is_builtin.is_(True)))
+    if count and count > 0:
+        return
+
     for spec in BUILTIN_TEMPLATES:
         existing = template_repo.get_by_name(db, spec["name"])
         if existing is not None and existing.is_builtin:

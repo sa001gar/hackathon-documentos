@@ -1,5 +1,5 @@
 """Document business logic: CRUD, template materialization, markdown rendering."""
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import NotFoundError
 from app.models import Document, DocumentSection
@@ -68,16 +68,57 @@ def get_sections(db: Session, document_id: str) -> list[DocumentSection]:
     by_parent: dict[str | None, list[DocumentSection]] = {}
     for section in sections:
         by_parent.setdefault(section.parent_id, []).append(section)
-
     ordered: list[DocumentSection] = []
-
     def walk(parent_id: str | None) -> None:
         for section in by_parent.get(parent_id, []):
             ordered.append(section)
             walk(section.id)
-
     walk(None)
     return ordered
+
+
+def build_section_map(db: Session, document_id: str) -> tuple[dict[str, DocumentSection], list[DocumentSection]]:
+    """Return (id→section map, flat ordered list) — preloads parent relationship."""
+    from sqlalchemy.orm import joinedload
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id)
+        .order_by(DocumentSection.order_index)
+        .all()
+    )
+    by_id: dict[str, DocumentSection] = {}
+    for s in sections:
+        by_id[s.id] = s
+    # Resolve parent references from the loaded map (zero extra queries)
+    for s in sections:
+        if s.parent_id and s.parent_id in by_id:
+            object.__setattr__(s, "parent", by_id[s.parent_id])
+    return by_id, sections
+
+
+def build_outline(sections: list[DocumentSection]) -> str:
+    """Build tree outline string from pre-loaded sections — no DB queries."""
+    by_parent: dict[str | None, list[DocumentSection]] = {}
+    for s in sections:
+        by_parent.setdefault(s.parent_id, []).append(s)
+    lines: list[str] = []
+    def walk(pid: str | None, depth: int = 0) -> None:
+        for s in by_parent.get(pid, []):
+            marker = "" if s.content.strip() else "  [empty]"
+            lines.append(f"{'  ' * depth}- {s.title}{marker}")
+            walk(s.id, depth + 1)
+    walk(None)
+    return "\n".join(lines)
+
+
+def section_path(section: DocumentSection, section_map: dict[str, DocumentSection]) -> str:
+    """Build section path from pre-loaded map — zero DB queries."""
+    parts = [section.title]
+    cursor_id = section.parent_id
+    while cursor_id and cursor_id in section_map:
+        parts.append(section_map[cursor_id].title)
+        cursor_id = section_map[cursor_id].parent_id
+    return " > ".join(reversed(parts))
 
 
 def section_stats(db: Session, document_id: str) -> tuple[int, int]:

@@ -1,7 +1,7 @@
 """AI-related tables: prompt registry, call logs, generation jobs."""
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -45,6 +45,10 @@ class AILog(UUIDPrimaryKey, Base):
     status: Mapped[str] = mapped_column(String(16), default="success", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_ai_logs_doc_created", "document_id", "created_at"),
+    )
 
 
 class GenerationJob(UUIDPrimaryKey, Base):

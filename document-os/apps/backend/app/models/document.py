@@ -1,5 +1,5 @@
 """Document model — the root of a hierarchical section tree."""
-from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -24,6 +24,10 @@ class Document(UUIDPrimaryKey, TimestampMixin, Base):
     meta: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
     created_by: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_documents_project_updated", "project_id", "updated_at"),
     )
 
     project: Mapped["Project"] = relationship(back_populates="documents")  # noqa: F821

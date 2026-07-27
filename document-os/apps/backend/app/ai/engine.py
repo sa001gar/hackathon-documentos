@@ -24,6 +24,7 @@ from app.core.errors import AIProviderError, NotFoundError
 from app.models import Document, DocumentSection
 from app.repositories import document_repo, section_repo
 from app.schemas.ai import RefineAction, ReviewReport, ValidationIssue, ValidationReport
+from app.services.document_service import build_section_map, build_outline, section_path
 
 
 def _persist_section_content(
@@ -38,34 +39,18 @@ def _persist_section_content(
 
 
 class AIEngine:
-    # ---------- context builders ----------
+    # ---------- context builders (N+1-free) ----------
 
     def _outline(self, db: Session, document_id: str) -> str:
         from app.services import document_service
-
-        sections = document_service.get_sections(db, document_id)
-        depth: dict[str | None, int] = {None: 0}
-        lines = []
-        for s in sections:
-            d = depth.get(s.parent_id, 0) + (1 if s.parent_id else 0)
-            depth[s.id] = d
-            marker = "" if s.content.strip() else "  [empty]"
-            lines.append(f"{'  ' * d}- {s.title}{marker}")
-        return "\n".join(lines)
-
-    def _section_path(self, section: DocumentSection) -> str:
-        parts = [section.title]
-        cursor = section.parent
-        while cursor is not None:
-            parts.append(cursor.title)
-            cursor = cursor.parent
-        return " > ".join(reversed(parts))
+        _, sections = build_section_map(db, document_id)
+        return build_outline(sections)
 
     def _sections_dump(self, db: Session, document_id: str) -> str:
         from app.services import document_service
-
+        _, sections = build_section_map(db, document_id)
         parts = []
-        for s in document_service.get_sections(db, document_id):
+        for s in sections:
             parts.append(f"SECTION: {s.title}\n{s.content.strip() or '(empty)'}\n")
         return "\n".join(parts)
 
@@ -76,17 +61,19 @@ class AIEngine:
         instructions: str | None,
         outline: str | None = None,
     ) -> SectionContext:
-        from app.services import document_service
-
         document = document_repo.get(db, section.document_id)
         if document is None:
             raise NotFoundError("Document not found")
+        section_map, sections = build_section_map(db, document.id)
+        ctx_outline = outline if outline is not None else build_outline(sections)
+        path = section_path(section, section_map) if section_map else ""
+
         return SectionContext(
             document_title=document.title,
             document_description=document.description or "",
-            outline=outline if outline is not None else self._outline(db, document.id),
+            outline=ctx_outline,
             section_title=section.title,
-            section_path=self._section_path(section),
+            section_path=path,
             brief=section.ai_prompt or "",
             instructions=instructions or "",
         )
@@ -112,12 +99,6 @@ class AIEngine:
         prompt: str,
         document_id: str | None = None,
     ) -> AsyncIterator[tuple[str, object]]:
-        """Stream the planner live: yields ("token", str) events, then one
-        ("plan", PlannerOutput) event after parsing the accumulated text.
-
-        Streaming removes the 30–120s silent window of the blocking planner
-        call — the client sees the outline forming token-by-token.
-        """
         from app.repositories import ai_log_repo
 
         agent = PlannerAgent(db)
@@ -135,7 +116,7 @@ class AIEngine:
             yield ("token", token)
 
         raw = "".join(chunks)
-        plan = agent.parse_plan(raw)  # raises AIParseError → caller retries
+        plan = agent.parse_plan(raw)
         ai_log_repo.create_log(
             db,
             document_id=document_id,
@@ -184,12 +165,6 @@ class AIEngine:
         instructions: str | None = None,
         outline: str | None = None,
     ) -> AsyncIterator[str]:
-        """Yield writer tokens as they arrive; persist the cleaned result at the end.
-
-        `outline` lets batch pipelines (full-document generation) compute the
-        document outline ONCE and share it across every section — otherwise
-        each section re-queries and re-renders the outline (N+1).
-        """
         from app.repositories import ai_log_repo
 
         section = section_repo.get(db, section_id)

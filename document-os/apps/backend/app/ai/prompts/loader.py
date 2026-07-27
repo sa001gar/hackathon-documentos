@@ -11,6 +11,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.ai.prompts.defaults import DEFAULT_CONFIG, DEFAULT_PROMPTS
+from app.models import AIPrompt
 from app.core.config import get_settings
 
 logger = logging.getLogger("documentos.ai.prompts")
@@ -56,13 +57,23 @@ def _parse_prompt_file(path: Path) -> dict:
 
 
 def seed_prompts_from_files(db: Session) -> None:
-    """Upsert packages/prompts/*.md into the ai_prompts registry (idempotent)."""
+    """Upsert packages/prompts/*.md into the ai_prompts registry (idempotent).
+
+    Skips file processing entirely if all 6 agents already have prompts seeded.
+    """
     from app.repositories import ai_prompt_repo  # lazy: avoid circulars at import time
 
     directory = _prompts_dir()
     if directory is None:
         logger.info("Prompts directory not found; using built-in defaults.")
         return
+
+    # Fast-path: skip if all agents already have at least one prompt row
+    from sqlalchemy import func, select
+    seeded = db.scalar(select(func.count(AIPrompt.agent)).distinct())
+    if seeded is not None and seeded >= len(AGENTS):
+        return
+
     for path in sorted(directory.glob("*.md")):
         parsed = _parse_prompt_file(path)
         agent = parsed["config"].get("agent", path.stem)

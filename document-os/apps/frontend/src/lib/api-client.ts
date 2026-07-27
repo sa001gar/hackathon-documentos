@@ -1,12 +1,20 @@
 import type {
   ActivityEntry,
   AuthResponse,
+  BrainAnswer,
+  Decision,
   DocumentDetail,
   DocumentStatus,
   DocumentSummary,
   Export,
   ExportFormat,
   GenerationJob,
+  HealthScore,
+  ImpactAnalysis,
+  KGEdge,
+  KGNode,
+  MemoryItem,
+  OrchestrationResult,
   Project,
   RefineAction,
   RefineResponse,
@@ -14,6 +22,7 @@ import type {
   SearchResults,
   Section,
   SectionStatus,
+  Specialist,
   Template,
   User,
   UserSettings,
@@ -277,6 +286,81 @@ export const searchApi = {
     if (workspaceId) params.set("workspace_id", workspaceId);
     return request<SearchResults>(`/search?${params.toString()}`);
   },
+};
+
+export const kgApi = {
+  search: (q: string, workspaceId?: string) => {
+    const params = new URLSearchParams({ q });
+    if (workspaceId) params.set("workspace_id", workspaceId);
+    return request<KGNode[]>(`/kg/nodes/search?${params.toString()}`);
+  },
+  getNode: (id: string) => request<KGNode>(`/kg/nodes/${id}`),
+  createNode: (body: { label: string; node_type: string; workspace_id?: string; project_id?: string; document_id?: string; properties?: Record<string, unknown> }) =>
+    request<KGNode>("/kg/nodes", { body }),
+  getImpact: (nodeId: string) => request<ImpactAnalysis>(`/kg/nodes/${nodeId}/impact`),
+  getSubgraph: (nodeId: string, depth = 2) => request<{ nodes: KGNode[]; edges: KGEdge[] }>(`/kg/nodes/${nodeId}/subgraph?depth=${depth}`),
+  getWorkspaceGraph: (workspaceId: string) => request<KGNode[]>(`/kg/workspace/${workspaceId}/graph`),
+  createEdge: (body: { source_id: string; target_id: string; relationship: string; weight?: number }) =>
+    request<void>("/kg/edges", { body }),
+};
+
+export const memoryApi = {
+  store: (body: { scope: string; scope_id: string; key: string; value?: Record<string, unknown>; content?: string; category?: string }) =>
+    request<MemoryItem>("/memory", { body }),
+  getByScope: (scope: string, scopeId: string, category?: string) => {
+    const params = category ? `?category=${encodeURIComponent(category)}` : "";
+    return request<MemoryItem[]>(`/memory/scope/${scope}/${scopeId}${params}`);
+  },
+  search: (q: string, scope?: string, scopeId?: string) => {
+    const params = new URLSearchParams({ q });
+    if (scope) params.set("scope", scope);
+    if (scopeId) params.set("scope_id", scopeId);
+    return request<MemoryItem[]>(`/memory/search?${params.toString()}`);
+  },
+  delete: (id: string) => request<void>(`/memory/${id}`, { method: "DELETE" }),
+};
+
+export const decisionApi = {
+  create: (body: { title: string; context?: string; decision?: string; rationale?: string; consequences?: string; alternatives?: Record<string, unknown>[]; trade_offs?: Record<string, unknown>[]; risks?: Record<string, unknown>[]; project_id?: string; workspace_id?: string; tags?: string[] }) =>
+    request<Decision>("/decisions", { body }),
+  get: (id: string) => request<Decision>(`/decisions/${id}`),
+  listForProject: (projectId: string) => request<Decision[]>(`/decisions/project/${projectId}`),
+  listForWorkspace: (workspaceId: string) => request<Decision[]>(`/decisions/workspace/${workspaceId}`),
+  search: (q: string, workspaceId?: string) => {
+    const params = new URLSearchParams({ q });
+    if (workspaceId) params.set("workspace_id", workspaceId);
+    return request<Decision[]>(`/decisions/search?${params.toString()}`);
+  },
+};
+
+export const healthScoreApi = {
+  get: (workspaceId: string) => request<HealthScore>(`/health-score/${workspaceId}`),
+};
+
+export const brainApi = {
+  ask: (query: string, workspaceId?: string) =>
+    request<BrainAnswer>("/brain/ask", { body: { query, workspace_id: workspaceId } }),
+};
+
+export const orchestrateApi = {
+  run: (body: { prompt: string; project_id?: string; workspace_id?: string; document_id?: string }) =>
+    request<OrchestrationResult>("/orchestrate/run", { body }),
+  resume: (threadId: string, approved: boolean, feedback?: string) =>
+    request<OrchestrationResult>("/orchestrate/resume", { body: { thread_id: threadId, approved, feedback } }),
+  listSpecialists: () => request<{ specialists: Specialist[]; count: number }>("/orchestrate/specialists"),
+  getSpecialist: (name: string) => request<Specialist>("/orchestrate/specialists/" + name),
+};
+
+export const contextApi = {
+  get: (params: { project_id?: string; workspace_id?: string; document_id?: string; query?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params.project_id) searchParams.set("project_id", params.project_id);
+    if (params.workspace_id) searchParams.set("workspace_id", params.workspace_id);
+    if (params.document_id) searchParams.set("document_id", params.document_id);
+    if (params.query) searchParams.set("query", params.query);
+    return request<Record<string, unknown>>(`/context?${searchParams.toString()}`);
+  },
+  preferences: () => request<Record<string, unknown>>("/context/preferences"),
 };
 
 export const exportApi = {
