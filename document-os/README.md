@@ -1,8 +1,8 @@
-# DocumentOS — AI Document Operating System
+# DocOS — AI Document Operating System
 
 **Built for the Google Gemma Hackathon.**
 
-DocumentOS is not another AI document generator. It is an intelligent document workspace
+DocOS is not another AI document generator. It is an intelligent document workspace
 where documents are **hierarchical trees of independently versioned sections**, and a team of
 specialized **Gemma agents** (Planner, Writer, Refiner, Validator, Reviewer, Exporter) helps you
 create, refine, validate, version, and export professional documents.
@@ -17,7 +17,7 @@ PRDs, SRS, research papers, API docs, SOPs, proposals, legal agreements, and mor
 
 ## Why it's different
 
-| Conventional AI tools | DocumentOS |
+| Conventional AI tools | DocOS |
 |---|---|
 | One monolithic response | Hierarchical document tree |
 | Regenerate everything | Regenerate exactly one section |
@@ -67,7 +67,7 @@ cp .env.example .env          # then edit .env:
                               #   GEMINI_API_KEY=your-key   (hosted Gemma 4)
                               #   DATABASE_URL=...          (external Postgres; SQLite default)
 uv sync                       # install deps (auto-gets Python 3.12)
-uv run python -m app.seed     # demo data → demo@documentos.ai / demo1234
+uv run python -m app.seed     # demo data → demo@DocOS.ai / demo1234
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -78,10 +78,10 @@ health: <http://localhost:8000/health>
 
 ```bash
 pnpm install
-pnpm --filter @documentos/frontend dev     # http://localhost:5173 (proxies /api → :8000)
+pnpm --filter @DocOS/frontend dev     # http://localhost:5173 (proxies /api → :8000)
 ```
 
-Log in with **demo@documentos.ai / demo1234**.
+Log in with **demo@DocOS.ai / demo1234**.
 Shortcut: `pnpm dev` from the repo root starts both.
 
 ### Database migrations
@@ -103,7 +103,7 @@ Postgres to migrate the production database.
 
 ```bash
 cd apps/backend && uv run pytest -q                 # 19 passed
-pnpm --filter @documentos/frontend build            # typecheck + production build
+pnpm --filter @DocOS/frontend build            # typecheck + production build
 ```
 
 ### Deploying (Dokploy)
@@ -118,7 +118,7 @@ Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 | Check | Command / action | Expected |
 |---|---|---|
 | Backend tests | `cd apps/backend && uv run pytest -q` | `19 passed` |
-| Frontend build | `pnpm --filter @documentos/frontend build` | builds with 0 TS errors |
+| Frontend build | `pnpm --filter @DocOS/frontend build` | builds with 0 TS errors |
 | API health | `curl http://localhost:8000/health` | `{"status":"ok", "ai_provider":"google"\|"ollama"\|"mock", …}` |
 | Login | `POST /api/v1/auth/login` (demo creds) | access + refresh tokens |
 | AI pipeline | In-app: open "Payments API Reference" → **Generate with AI** | outline appears, sections fill in, status → `generated` |
