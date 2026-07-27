@@ -1,8 +1,8 @@
 import type { DocumentSummary, Project } from "@documentos/shared-types";
 import { cn, formatRelativeTime } from "@documentos/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, FileText, FolderPlus, MoreHorizontal, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, FileText, FolderPlus, MoreHorizontal, Plus, Trash2, Pencil } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { StatusDot, DOCUMENT_DOT_COLORS } from "@/components/status";
@@ -12,6 +12,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -182,6 +183,38 @@ function DocumentRow({ doc, active }: { doc: DocumentSummary; active: boolean })
   const location = useLocation();
   const queryClient = useQueryClient();
 
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(doc.title);
+
+  useEffect(() => {
+    if (!isRenaming) setRenameValue(doc.title);
+  }, [doc.title, isRenaming]);
+
+  const renameDoc = useMutation({
+    mutationFn: (next: string) => documentApi.update(doc.id, { title: next }),
+    onMutate: async (nextTitle) => {
+      await queryClient.cancelQueries({ queryKey: ["documents", doc.project_id] });
+      const previousDocs = queryClient.getQueryData<DocumentSummary[]>(["documents", doc.project_id]);
+      if (previousDocs) {
+        queryClient.setQueryData<DocumentSummary[]>(
+          ["documents", doc.project_id],
+          previousDocs.map((d) => (d.id === doc.id ? { ...d, title: nextTitle } : d)),
+        );
+      }
+      return { previousDocs };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previousDocs) {
+        queryClient.setQueryData(["documents", doc.project_id], context.previousDocs);
+      }
+      toast.error(err instanceof ApiClientError ? err.message : "Failed to rename document");
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["documents", doc.project_id] });
+      void queryClient.invalidateQueries({ queryKey: ["workspace-documents"] });
+    },
+  });
+
   const deleteDoc = useMutation({
     mutationFn: () => documentApi.remove(doc.id),
     onMutate: async () => {
@@ -217,7 +250,9 @@ function DocumentRow({ doc, active }: { doc: DocumentSummary; active: boolean })
 
   return (
     <div
-      onClick={() => navigate(`/doc/${doc.id}`)}
+      onClick={() => {
+        if (!isRenaming) navigate(`/doc/${doc.id}`);
+      }}
       className={cn(
         "group/doc flex min-w-0 w-full items-center justify-between gap-1 rounded-md px-2 py-1 text-left text-[13px] cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring transition-colors",
         active ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -225,33 +260,71 @@ function DocumentRow({ doc, active }: { doc: DocumentSummary; active: boolean })
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <StatusDot status={doc.status} map={DOCUMENT_DOT_COLORS} className="h-1.5 w-1.5 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+        {isRenaming ? (
+          <input
+            autoFocus
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const next = renameValue.trim();
+                if (next && next !== doc.title) renameDoc.mutate(next);
+                setIsRenaming(false);
+              } else if (e.key === "Escape") {
+                setIsRenaming(false);
+                setRenameValue(doc.title);
+              }
+            }}
+            onBlur={() => {
+              const next = renameValue.trim();
+              if (next && next !== doc.title) renameDoc.mutate(next);
+              setIsRenaming(false);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="flex h-5 w-full bg-background px-1 py-0 text-[13px] outline-none ring-1 ring-ring rounded-sm"
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate">{doc.title}</span>
+        )}
       </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            onClick={(e) => e.stopPropagation()}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity group-hover/doc:opacity-100 hover:bg-accent-foreground/10 hover:text-foreground"
-            aria-label="Document options"
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-32 text-xs">
-          <DropdownMenuItem
-            onClick={(e) => {
-              e.stopPropagation();
-              deleteDoc.mutate();
-            }}
-            className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {!isRenaming && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity group-hover/doc:opacity-100 hover:bg-accent-foreground/10 hover:text-foreground"
+              aria-label="Document options"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-32 text-xs">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsRenaming(true);
+              }}
+              className="flex cursor-pointer items-center gap-2"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteDoc.mutate();
+              }}
+              className="flex cursor-pointer items-center gap-2 text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }
