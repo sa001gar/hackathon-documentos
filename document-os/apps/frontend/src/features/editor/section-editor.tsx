@@ -48,6 +48,7 @@ export function SectionEditor({ section, documentId, autosaveInterval }: Section
       editorProps: {
         attributes: {
           class: "docos-editor px-1 py-2 text-[14px] leading-relaxed focus:outline-none",
+          spellcheck: "false",
         },
       },
       onUpdate: ({ editor: e }) => {

@@ -96,7 +96,8 @@
   .docos-prose,
   .docos-editor,
   .ProseMirror {
-    @apply text-[14.5px] leading-[1.8] text-foreground/85 outline-none min-h-full max-w-none;
+    @apply text-[14.5px] leading-[1.8] text-foreground/85 outline-none min-h-full max-w-none min-w-0;
+    spellcheck: false;
   }
   .docos-prose > *:first-child,
   .docos-editor > *:first-child,
@@ -176,18 +177,111 @@
   .ProseMirror pre code {
     @apply bg-transparent p-0 text-inherit border-0;
   }
+
+  /* ---- Syntax Highlighting (Lowlight / Highlight.js tokens) ---- */
+  .docos-prose .hljs-comment,
+  .docos-editor .hljs-comment,
+  .ProseMirror .hljs-comment,
+  .hljs-comment,
+  .hljs-quote {
+    color: #8b949e !important;
+    font-style: italic !important;
+  }
+  .docos-prose .hljs-keyword,
+  .docos-editor .hljs-keyword,
+  .ProseMirror .hljs-keyword,
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-subst {
+    color: #f472b6 !important;
+    font-weight: 600 !important;
+  }
+  .docos-prose .hljs-string,
+  .docos-editor .hljs-string,
+  .ProseMirror .hljs-string,
+  .hljs-string,
+  .hljs-doctag,
+  .hljs-regexp,
+  .hljs-addition {
+    color: #a5d6ff !important;
+  }
+  .docos-prose .hljs-title,
+  .docos-editor .hljs-title,
+  .ProseMirror .hljs-title,
+  .hljs-title,
+  .hljs-section,
+  .hljs-title.function_,
+  .hljs-title.class_ {
+    color: #d2a8ff !important;
+    font-weight: 600 !important;
+  }
+  .docos-prose .hljs-built_in,
+  .docos-editor .hljs-built_in,
+  .ProseMirror .hljs-built_in,
+  .hljs-built_in,
+  .hljs-type {
+    color: #79c0ff !important;
+    font-weight: 500 !important;
+  }
+  .docos-prose .hljs-variable,
+  .docos-editor .hljs-variable,
+  .ProseMirror .hljs-variable,
+  .hljs-variable,
+  .hljs-template-variable,
+  .hljs-params {
+    color: #ffa657 !important;
+  }
+  .docos-prose .hljs-number,
+  .docos-editor .hljs-number,
+  .ProseMirror .hljs-number,
+  .hljs-number,
+  .hljs-literal {
+    color: #79c0ff !important;
+  }
+  .docos-prose .hljs-attr,
+  .docos-editor .hljs-attr,
+  .ProseMirror .hljs-attr,
+  .hljs-attr,
+  .hljs-attribute {
+    color: #79c0ff !important;
+  }
+  .docos-prose .hljs-symbol,
+  .docos-editor .hljs-symbol,
+  .ProseMirror .hljs-symbol,
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-punctuation {
+    color: #facc15 !important;
+  }
+  .docos-prose .hljs-meta,
+  .docos-editor .hljs-meta,
+  .ProseMirror .hljs-meta,
+  .hljs-meta {
+    color: #a5d6ff !important;
+  }
+  .docos-prose .hljs-deletion,
+  .docos-editor .hljs-deletion,
+  .ProseMirror .hljs-deletion,
+  .hljs-deletion {
+    color: #ffa198 !important;
+    background-color: #490202 !important;
+  }
+  .hljs-emphasis {
+    font-style: italic !important;
+  }
+  .hljs-strong {
+    font-weight: 700 !important;
+  }
   .docos-editor .tableWrapper {
     @apply my-3 w-full max-w-full overflow-x-auto rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 shadow-sm bg-white/70 dark:bg-zinc-900/50 backdrop-blur-sm;
   }
-  .docos-prose table {
-    @apply my-3 block w-full max-w-full overflow-x-auto border-collapse rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 text-[13px] shadow-sm bg-white/70 dark:bg-zinc-900/50 backdrop-blur-sm;
-  }
+  .docos-prose table,
   .docos-editor table,
   .ProseMirror table {
-    @apply my-3 w-full min-w-full border-collapse text-[13px];
+    @apply my-3 block w-full max-w-full overflow-x-auto border-collapse rounded-xl border border-indigo-200/60 dark:border-indigo-900/50 text-[13px] shadow-sm bg-white/70 dark:bg-zinc-900/50 backdrop-blur-sm;
   }
   .docos-editor .tableWrapper table {
-    @apply my-0 border-0 shadow-none bg-transparent rounded-none block min-w-full;
+    @apply my-0 border-0 shadow-none bg-transparent rounded-none inline-table min-w-full max-w-none overflow-visible;
   }
   .docos-prose thead th,
   .docos-prose th,
@@ -195,7 +289,7 @@
   .docos-editor th,
   .ProseMirror thead th,
   .ProseMirror th {
-    @apply border border-indigo-200/60 dark:border-indigo-900/50 bg-indigo-50/70 dark:bg-indigo-950/40 px-4 py-2.5 text-left font-semibold text-foreground align-top tracking-tight text-[13.5px];
+    @apply border border-indigo-200/60 dark:border-indigo-900/50 bg-indigo-50/70 dark:bg-indigo-950/40 px-4 py-2.5 text-left font-semibold text-foreground align-top tracking-tight text-[13.5px] break-words;
   }
   .docos-prose tbody td,
   .docos-prose td,
@@ -203,7 +297,7 @@
   .docos-editor td,
   .ProseMirror tbody td,
   .ProseMirror td {
-    @apply border border-indigo-200/50 dark:border-indigo-900/40 px-4 py-2.5 align-top text-foreground/90 leading-relaxed text-[13.5px];
+    @apply border border-indigo-200/50 dark:border-indigo-900/40 px-4 py-2.5 align-top text-foreground/90 leading-relaxed text-[13.5px] break-words;
   }
   .docos-prose table p,
   .docos-editor table p,
@@ -261,9 +355,21 @@
     @apply my-0;
   }
 
-  /* Mermaid diagram blocks */
+  /* Mermaid diagram blocks with interactive clickable nodes */
   .docos-mermaid {
-    @apply my-4 flex justify-center rounded-lg border border-border bg-card p-4 overflow-x-auto;
+    @apply my-2 flex justify-center rounded-lg border border-border/50 bg-card/30 p-4 overflow-x-auto transition-all;
+  }
+  .docos-mermaid svg .node,
+  .docos-mermaid svg g.node,
+  .docos-mermaid svg g.cluster,
+  .docos-mermaid svg .label {
+    cursor: pointer !important;
+    transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+  }
+  .docos-mermaid svg .node:hover,
+  .docos-mermaid svg g.node:hover {
+    filter: drop-shadow(0 0 8px rgba(85, 81, 255, 0.6)) brightness(1.05);
+    opacity: 0.95;
   }
 
   /* Slash-command + bubble menu z-order safety */

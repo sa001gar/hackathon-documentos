@@ -1,17 +1,57 @@
 import { cn } from "@documentos/utils";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { Check, Code2, Copy, Download, ImageDown, Maximize2, Pencil } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Check,
+  ChevronDown,
+  Code2,
+  Copy,
+  Download,
+  Edit3,
+  ImageDown,
+  Maximize2,
+  MousePointerClick,
+  Pencil,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useDebouncedValue } from "@/hooks/use-debounce";
 import { useTheme } from "@/hooks/use-theme";
 
 let mermaidSeq = 0;
 
-/** Renders a mermaid source string as an SVG diagram (debounced). Mermaid's ~679KB is lazy-loaded. */
-export function MermaidDiagram({ code, className }: { code: string; className?: string }) {
+/** Renders a mermaid source string as an SVG diagram with interactive clickable node support. */
+export function MermaidDiagram({
+  code,
+  className,
+  onNodeClick,
+  onDiagramClick,
+}: {
+  code: string;
+  className?: string;
+  onNodeClick?: (nodeText: string) => void;
+  onDiagramClick?: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const debounced = useDebouncedValue(code, 500);
   const [svg, setSvg] = useState<string | null>(null);
@@ -60,6 +100,32 @@ export function MermaidDiagram({ code, className }: { code: string; className?: 
     };
   }, [debounced, resolvedTheme]);
 
+  // Attach interactive click handlers to SVG nodes
+  useEffect(() => {
+    if (!svg || !containerRef.current) return;
+    const container = containerRef.current;
+    const nodeEls = container.querySelectorAll(".node, g.node, g.cluster, .label");
+
+    const cleanupFns: (() => void)[] = [];
+
+    nodeEls.forEach((nodeEl) => {
+      const handler = (e: MouseEvent) => {
+        e.stopPropagation();
+        const text = nodeEl.textContent?.trim() ?? "";
+        if (text && onNodeClick) {
+          onNodeClick(text);
+        }
+      };
+      nodeEl.addEventListener("click", handler as EventListener);
+      (nodeEl as HTMLElement).style.cursor = "pointer";
+      cleanupFns.push(() => nodeEl.removeEventListener("click", handler as EventListener));
+    });
+
+    return () => {
+      cleanupFns.forEach((fn) => fn());
+    };
+  }, [svg, onNodeClick]);
+
   if (!debounced.trim()) return null;
   if (error) {
     return (
@@ -77,8 +143,10 @@ export function MermaidDiagram({ code, className }: { code: string; className?: 
   }
   return (
     <div
-      className={cn("docos-mermaid not-prose", className)}
+      ref={containerRef}
+      className={cn("docos-mermaid not-prose cursor-pointer select-none", className)}
       data-mermaid-svg
+      onClick={onDiagramClick}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
@@ -118,21 +186,68 @@ async function svgToPngBlob(svg: string): Promise<Blob | null> {
   }
 }
 
+function updateNodeContent(editor: any, getPos: any, node: any, newCode: string) {
+  if (typeof getPos !== "function" || !editor) return;
+  const pos = getPos();
+  if (typeof pos !== "number") return;
+  const tr = editor.state.tr;
+  const from = pos + 1;
+  const to = pos + node.nodeSize - 1;
+  tr.replaceWith(from, to, editor.state.schema.text(newCode));
+  editor.view.dispatch(tr);
+}
+
+function renameNodeInCode(code: string, oldName: string, newName: string): string {
+  if (!oldName.trim() || !newName.trim() || oldName === newName) return code;
+  const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(escaped, "g");
+  return code.replace(regex, newName);
+}
+
+function removeNodeFromCode(code: string, nodeName: string): string {
+  if (!nodeName.trim()) return code;
+  const lines = code.split("\n");
+  const filtered = lines.filter((line) => !line.includes(nodeName));
+  return filtered.join("\n");
+}
+
+function flipDiagramDirection(code: string): string {
+  if (/\b(graph|flowchart)\s+LR\b/i.test(code)) {
+    return code.replace(/\b(graph|flowchart)\s+LR\b/i, "$1 TD");
+  }
+  if (/\b(graph|flowchart)\s+TD\b/i.test(code)) {
+    return code.replace(/\b(graph|flowchart)\s+TD\b/i, "$1 LR");
+  }
+  if (/\b(graph|flowchart)\s+TB\b/i.test(code)) {
+    return code.replace(/\b(graph|flowchart)\s+TB\b/i, "$1 LR");
+  }
+  return code;
+}
+
 const CODE_LANGUAGES = [
-  "text", "javascript", "typescript", "python", "json", "bash", "sql", "html", "css",
-  "java", "go", "rust", "c", "cpp", "yaml", "markdown", "mermaid",
+  "text",
+  "javascript",
+  "typescript",
+  "python",
+  "json",
+  "bash",
+  "sql",
+  "html",
+  "css",
+  "java",
+  "go",
+  "rust",
+  "c",
+  "cpp",
+  "yaml",
+  "markdown",
+  "mermaid",
 ];
 
 /**
- * Node view for code blocks.
- *
- * - Mermaid blocks render as a diagram by default (source hidden). A hover
- *   toolbar offers: edit source, copy, download SVG/PNG, fullscreen.
- * - Other languages get a header bar with a language selector + copy button.
- *
- * Serialization stays `<pre><code class="language-x">` so markdown round-trips.
+ * Node view for code blocks with interactive clickable diagram support.
  */
-export function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
+export function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
   const language = String(node.attrs.language ?? "").toLowerCase();
   const isMermaid = language === "mermaid";
   const code = node.textContent;
@@ -140,6 +255,12 @@ export function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
   const [editing, setEditing] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Clickable Node Editor state
+  const [nodeModalOpen, setNodeModalOpen] = useState(false);
+  const [selectedNode, setSelectedNode] = useState("");
+  const [newNodeLabel, setNewNodeLabel] = useState("");
+
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const copyCode = () => {
@@ -170,52 +291,271 @@ export function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
     else toast.error("PNG export failed");
   };
 
+  const handleSaveNodeLabel = () => {
+    if (selectedNode && newNodeLabel.trim()) {
+      const updated = renameNodeInCode(code, selectedNode, newNodeLabel.trim());
+      updateNodeContent(editor, getPos, node, updated);
+      setNodeModalOpen(false);
+      toast.success(`Updated node label to "${newNodeLabel.trim()}"`);
+    }
+  };
+
   if (isMermaid) {
     return (
-      <NodeViewWrapper ref={wrapperRef} className="group/mmd relative">
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-md border border-border/60 bg-popover/95 p-0.5 opacity-0 shadow-sm transition-opacity focus-within:opacity-100 group-hover/mmd:opacity-100">
+      <NodeViewWrapper ref={wrapperRef} className="group/mmd relative my-4">
+        {/* Floating Toolbar */}
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-lg border border-border/60 bg-popover/95 p-1 opacity-0 shadow-md backdrop-blur-md transition-opacity focus-within:opacity-100 group-hover/mmd:opacity-100">
           <Button
-            size="icon-sm" variant="ghost"
+            size="icon-sm"
+            variant={editing ? "default" : "ghost"}
             aria-label={editing ? "Done editing" : "Edit diagram source"}
-            title={editing ? "Done editing" : "Edit diagram source"}
-            onClick={() => setEditing((v) => !v)}
+            title={editing ? "Done editing" : "Click to edit source"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditing((v) => !v);
+            }}
           >
             {editing ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
           </Button>
-          <Button size="icon-sm" variant="ghost" aria-label="Copy source" title="Copy source" onClick={copyCode}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Copy source"
+            title="Copy source"
+            onClick={(e) => {
+              e.stopPropagation();
+              copyCode();
+            }}
+          >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
           </Button>
-          <Button size="icon-sm" variant="ghost" aria-label="Download SVG" title="Download SVG" onClick={downloadSvg}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Download SVG"
+            title="Download SVG"
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadSvg();
+            }}
+          >
             <Download className="h-3.5 w-3.5" />
           </Button>
-          <Button size="icon-sm" variant="ghost" aria-label="Download PNG" title="Download PNG" onClick={() => void downloadPng()}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Download PNG"
+            title="Download PNG"
+            onClick={(e) => {
+              e.stopPropagation();
+              void downloadPng();
+            }}
+          >
             <ImageDown className="h-3.5 w-3.5" />
           </Button>
-          <Button size="icon-sm" variant="ghost" aria-label="Fullscreen" title="Fullscreen" onClick={() => setFullscreen(true)}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Workbench Editor"
+            title="Open Interactive Workbench"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFullscreen(true);
+            }}
+          >
             <Maximize2 className="h-3.5 w-3.5" />
           </Button>
         </div>
 
-        <MermaidDiagram code={code} />
+        {/* Hover Click-to-Edit Pill */}
+        <div className="pointer-events-none absolute left-3 top-3 z-10 flex items-center gap-1.5 rounded-full border border-indigo-200/80 dark:border-indigo-900/80 bg-background/90 px-2.5 py-1 text-[10px] font-medium text-muted-foreground opacity-0 shadow-xs transition-opacity group-hover/mmd:opacity-100">
+          <MousePointerClick className="h-3 w-3 text-primary animate-pulse" />
+          <span>Click any node to edit label • Click diagram to edit source</span>
+        </div>
+
+        {/* Rendered SVG Diagram */}
+        <div
+          className={cn(
+            "rounded-xl border p-4 transition-all duration-200",
+            editing
+              ? "border-primary/50 ring-2 ring-primary/20 bg-accent/20"
+              : "border-border/60 hover:border-indigo-300 dark:hover:border-indigo-800 bg-card/40",
+          )}
+        >
+          <MermaidDiagram
+            code={code}
+            onNodeClick={(nodeText) => {
+              setSelectedNode(nodeText);
+              setNewNodeLabel(nodeText);
+              setNodeModalOpen(true);
+            }}
+            onDiagramClick={() => setEditing((v) => !v)}
+          />
+        </div>
 
         {/* Source stays mounted for ProseMirror; visible only while editing. */}
-        <div className={cn("mt-1", !editing && "hidden")}>
-          <div className="flex items-center gap-1.5 rounded-t-lg border border-b-0 border-border bg-muted/50 px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            <Code2 className="h-3 w-3" />
-            mermaid source
+        <div className={cn("mt-2", !editing && "hidden")}>
+          <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-border bg-muted/50 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <Code2 className="h-3.5 w-3.5 text-primary" />
+              <span>Mermaid Source</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  const flipped = flipDiagramDirection(code);
+                  updateNodeContent(editor, getPos, node, flipped);
+                }}
+                className="h-6 text-[10px] gap-1"
+                title="Flip layout direction (LR / TD)"
+              >
+                <ArrowLeftRight className="h-3 w-3" />
+                Flip Direction
+              </Button>
+            </div>
           </div>
-          <pre className="!mt-0 rounded-t-none" data-language="mermaid">
-            <NodeViewContent as="code" />
+          <pre className="!mt-0 rounded-t-none" data-language="mermaid" spellCheck={false}>
+            <NodeViewContent as="code" spellCheck={false} />
           </pre>
         </div>
 
-        <Dialog open={fullscreen} onOpenChange={setFullscreen}>
-          <DialogContent className="flex h-[85vh] max-w-5xl flex-col">
+        {/* Node Quick Editor Dialog */}
+        <Dialog open={nodeModalOpen} onOpenChange={setNodeModalOpen}>
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Diagram</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit3 className="h-4 w-4 text-primary" />
+                Edit Node Label
+              </DialogTitle>
+              <DialogDescription>
+                Update label for node <code className="font-semibold text-foreground">{selectedNode}</code> in diagram.
+              </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-card p-6 [&_svg]:mx-auto">
-              <MermaidDiagram code={code} />
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="node-label">Node Text Label</Label>
+                <Input
+                  id="node-label"
+                  value={newNodeLabel}
+                  onChange={(e) => setNewNodeLabel(e.target.value)}
+                  placeholder="Enter new node text..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSaveNodeLabel();
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <DialogFooter className="flex flex-col sm:flex-row gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  if (selectedNode) {
+                    const updated = removeNodeFromCode(code, selectedNode);
+                    updateNodeContent(editor, getPos, node, updated);
+                    setNodeModalOpen(false);
+                    toast.success(`Removed node "${selectedNode}"`);
+                  }
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Node
+              </Button>
+
+              <div className="flex-1" />
+
+              <Button variant="outline" size="sm" onClick={() => setNodeModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSaveNodeLabel}>
+                <Check className="h-3.5 w-3.5" />
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Fullscreen / Interactive Diagram Workbench Modal */}
+        <Dialog open={fullscreen} onOpenChange={setFullscreen}>
+          <DialogContent className="flex h-[90vh] max-w-6xl flex-col p-6">
+            <DialogHeader className="border-b pb-3">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-2 text-lg">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  Interactive Diagram Workbench
+                </DialogTitle>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={copyCode}>
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy Code
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={downloadSvg}>
+                    <Download className="h-3.5 w-3.5" />
+                    SVG
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => void downloadPng()}>
+                    <ImageDown className="h-3.5 w-3.5" />
+                    PNG
+                  </Button>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2 gap-4 py-3">
+              {/* Left Pane: Code Editor + Quick Tools */}
+              <div className="flex flex-col rounded-xl border border-border bg-muted/20 p-3 min-h-0">
+                <div className="mb-2 flex items-center justify-between border-b pb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Code2 className="h-3.5 w-3.5 text-primary" />
+                    Source Editor
+                  </span>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => {
+                      const flipped = flipDiagramDirection(code);
+                      updateNodeContent(editor, getPos, node, flipped);
+                    }}
+                    className="h-6 text-[10px] gap-1"
+                  >
+                    <ArrowLeftRight className="h-3 w-3" />
+                    Flip Direction
+                  </Button>
+                </div>
+                <textarea
+                  value={code}
+                  onChange={(e) => updateNodeContent(editor, getPos, node, e.target.value)}
+                  className="flex-1 font-mono text-xs leading-relaxed bg-background p-3 rounded-lg border border-border/80 outline-none resize-none focus:ring-1 focus:ring-primary"
+                  placeholder="Enter Mermaid diagram code..."
+                  spellCheck={false}
+                />
+              </div>
+
+              {/* Right Pane: Live Interactive SVG Preview */}
+              <div className="flex flex-col rounded-xl border border-border bg-card p-4 min-h-0 overflow-auto">
+                <div className="mb-2 flex items-center justify-between border-b pb-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <MousePointerClick className="h-3.5 w-3.5 text-primary animate-pulse" />
+                    Live Clickable Preview
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">Click any node to rename</span>
+                </div>
+                <div className="flex-1 flex items-center justify-center overflow-auto p-4 [&_svg]:mx-auto [&_svg]:max-w-full">
+                  <MermaidDiagram
+                    code={code}
+                    onNodeClick={(nodeText) => {
+                      setSelectedNode(nodeText);
+                      setNewNodeLabel(nodeText);
+                      setNodeModalOpen(true);
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -226,18 +566,30 @@ export function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
   return (
     <NodeViewWrapper className="group/code">
       <div className="flex items-center justify-between rounded-t-lg border border-b-0 border-border bg-muted/50 px-3 py-1">
-        <select
-          value={language || "text"}
-          onChange={(e) => updateAttributes({ language: e.target.value === "text" ? null : e.target.value })}
-          aria-label="Code language"
-          className="cursor-pointer bg-transparent text-[10px] font-medium uppercase tracking-wide text-muted-foreground outline-none hover:text-foreground"
-        >
-          {CODE_LANGUAGES.map((l) => (
-            <option key={l} value={l}>
-              {l}
-            </option>
-          ))}
-        </select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Code language"
+              className="flex cursor-pointer items-center gap-1 bg-transparent text-[10px] font-medium uppercase tracking-wide text-muted-foreground outline-none transition-colors hover:text-foreground"
+            >
+              <span>{language || "text"}</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-60 overflow-y-auto">
+            {CODE_LANGUAGES.map((l) => (
+              <DropdownMenuItem
+                key={l}
+                onSelect={() => updateAttributes({ language: l === "text" ? null : l })}
+                className="flex cursor-pointer items-center justify-between text-[11px] uppercase tracking-wide"
+              >
+                <span>{l}</span>
+                {(language || "text") === l && <Check className="h-3 w-3 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <button
           type="button"
           onClick={copyCode}
@@ -248,8 +600,8 @@ export function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="!mt-0 rounded-t-none" data-language={language || undefined}>
-        <NodeViewContent as="code" />
+      <pre className="!mt-0 rounded-t-none" data-language={language || undefined} spellCheck={false}>
+        <NodeViewContent as="code" spellCheck={false} />
       </pre>
     </NodeViewWrapper>
   );

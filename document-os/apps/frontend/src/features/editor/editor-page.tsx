@@ -174,7 +174,7 @@ export function EditorPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.2 }}
-          className="mx-auto max-w-4xl px-4 sm:px-6 pb-44 pt-6"
+          className="mx-auto max-w-4xl px-4 sm:px-6 pb-44 pt-6 min-w-0"
         >
           {(genPhase === "connecting" || genPhase === "planning") && <PlanningState />}
           {flat.length === 0 ? (

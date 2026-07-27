@@ -379,7 +379,7 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
 
         {/* Body */}
         {!collapsed && (
-          <div className="relative mt-1 pl-6">
+          <div className="relative mt-1 pl-6 min-w-0 max-w-full">
             {pipelineStreaming ? (
               <StreamingBody tokens={genSection?.tokens ?? ""} />
             ) : queued ? (
@@ -393,7 +393,7 @@ export function SectionCard({ node, depth, documentId, autosaveInterval }: Secti
       </div>
 
       {node.children.length > 0 && !collapsed && (
-        <div className="ml-3 sm:ml-4 mt-2.5 space-y-3 border-l-2 border-indigo-200/60 dark:border-indigo-900/50 pl-3 sm:pl-4">
+        <div className="ml-3 sm:ml-4 mt-2.5 space-y-3 border-l-2 border-indigo-200/60 dark:border-indigo-900/50 pl-3 sm:pl-4 min-w-0 max-w-full">
           {node.children.map((child) => (
             <SectionCard
               key={child.id}

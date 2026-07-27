@@ -236,7 +236,7 @@ function ThreadPanel({ onEdit, onRetry }: ThreadPanelProps) {
 
         <button
           type="button"
-          onClick={clearThread}
+          onClick={() => clearThread()}
           className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
         >
           Clear thread
@@ -360,7 +360,8 @@ export function AiComposer({ doc }: { doc: DocumentDetail }) {
   const clearSectionContext = useEditorStore((s) => s.clearSectionContext);
 
   const focusNonce = useComposerStore((s) => s.focusNonce);
-  const push = useComposerStore((s) => s.push);
+  const pushDoc = useComposerStore((s) => s.pushDoc);
+  const push = (role: "user" | "ai", text: string) => pushDoc(doc.id, role, text);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     dragControls.start(e);

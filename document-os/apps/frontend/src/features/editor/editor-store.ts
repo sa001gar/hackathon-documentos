@@ -3,7 +3,7 @@ import type { Editor } from "@tiptap/core";
 import { create } from "zustand";
 import type { SaveState } from "@/hooks/use-autosave";
 
-export type InspectorTab = "outline" | "agents" | "validate" | "review" | "activity";
+export type InspectorTab = "outline" | "prompts" | "review";
 export type EditorAction = "export";
 
 interface SectionSaveInfo {
@@ -61,7 +61,7 @@ export const useEditorStore = create<EditorUiState>()((set) => ({
   validateRunId: 0,
   reviewRunId: 0,
   requestValidate: () =>
-    set((s) => ({ validateRunId: s.validateRunId + 1, inspectorTab: "validate" })),
+    set((s) => ({ validateRunId: s.validateRunId + 1 })),
   requestReview: () => set((s) => ({ reviewRunId: s.reviewRunId + 1, inspectorTab: "review" })),
   versionsSectionId: null,
   setVersionsSectionId: (versionsSectionId) => set({ versionsSectionId }),

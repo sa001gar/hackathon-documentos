@@ -1,8 +1,55 @@
 import { marked } from "marked";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
+import { common, createLowlight } from "lowlight";
+
+const lowlight = createLowlight(common);
+
+function escapeHtml(s?: string): string {
+  if (typeof s !== "string") return "";
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeAttr(s?: string): string {
+  if (typeof s !== "string") return "";
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function hastToHtml(node: any): string {
+  if (node.type === "text") return escapeHtml(node.value);
+  if (node.type === "element") {
+    const cls = (node.properties?.className || []).join(" ");
+    const children = (node.children || []).map(hastToHtml).join("");
+    return `<span class="${cls}">${children}</span>`;
+  }
+  if (node.children) return node.children.map(hastToHtml).join("");
+  return "";
+}
+
+function highlightCode(code: string, lang?: string): string {
+  const cleanLang = (lang || "").trim().toLowerCase();
+  if (!cleanLang || cleanLang === "text" || cleanLang === "plain" || cleanLang === "mermaid") {
+    return escapeHtml(code);
+  }
+  try {
+    const tree = lowlight.highlight(cleanLang, code);
+    return hastToHtml(tree);
+  } catch {
+    return escapeHtml(code);
+  }
+}
 
 marked.setOptions({ gfm: true, breaks: false });
+marked.use({
+  renderer: {
+    code(code: string, infostring?: string) {
+      const language = (infostring || "").split(/\s+/)[0];
+      const highlighted = highlightCode(code, language);
+      const langClass = language ? ` class="language-${escapeAttr(language)}"` : "";
+      return `<pre><code${langClass}>${highlighted}</code></pre>\n`;
+    },
+  },
+});
 
 /** Pre-process markdown so constructs TipTap doesn't natively know survive the round-trip. */
 function preprocessMarkdown(md: string): string {
@@ -27,13 +74,7 @@ function preprocessMarkdown(md: string): string {
   return out.join("\n");
 }
 
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 /**
  * Marked renders GFM checkboxes as `<li><input type="checkbox">…` while the
