@@ -87,7 +87,7 @@ export function EditorToolbar() {
   const activeEditor = useEditorStore((s) => s.activeEditor);
 
   return (
-    <div className="flex h-10 items-center gap-0.5 overflow-x-auto border-b border-border/60 bg-background/80 px-3 backdrop-blur-sm">
+    <div className="flex h-9 w-full items-center gap-0.5 border-b border-border/60 bg-muted/30 px-3 overflow-x-auto min-w-0 flex-nowrap backdrop-blur-sm">
       {ITEMS.map((item, i) =>
         item === "divider" ? (
           <div key={`d${i}`} className="mx-1.5 h-4 w-px shrink-0 bg-border/60" aria-hidden />

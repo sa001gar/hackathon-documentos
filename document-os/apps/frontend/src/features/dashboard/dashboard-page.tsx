@@ -202,24 +202,24 @@ export function DashboardPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-8 py-8">
+      <div className="mx-auto max-w-5xl px-4 py-5 sm:px-8 sm:py-8">
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-          <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
             <div>
-              <h1 className="text-xl font-semibold tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
                 {greeting()}, {firstName}
               </h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">
+              <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
                 {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
                 {workspace ? ` — ${workspace.name}` : ""}
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setCreateProjectOpen(true)}>
+            <div className="flex w-full sm:w-auto items-center gap-2">
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial" onClick={() => setCreateProjectOpen(true)}>
                 <FolderPlus className="h-4 w-4" />
                 New project
               </Button>
-              <Button size="sm" onClick={() => setCreateDoc({ open: true })} disabled={projects.length === 0}>
+              <Button size="sm" className="flex-1 sm:flex-initial" onClick={() => setCreateDoc({ open: true })} disabled={projects.length === 0}>
                 <Plus className="h-4 w-4" />
                 New document
               </Button>

@@ -49,7 +49,7 @@ export function WorkspaceSwitcher({ workspaces, workspace }: WorkspaceSwitcherPr
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button className="flex min-w-0 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-          <img src="/logo.jpg" alt="Logo" className="h-5 w-5 rounded object-cover shrink-0 border border-indigo-500/30 shadow-xs" />
+          <img src="/logo.png" alt="Logo" className="h-5 w-5 object-contain shrink-0" />
           <span className="min-w-0 flex-1 truncate">
             {workspace ? workspace.name : "No workspace"}
           </span>
