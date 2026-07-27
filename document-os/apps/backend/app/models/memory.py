@@ -15,8 +15,8 @@ MEMORY_SCOPES = ("user", "project", "workspace", "organization")
 class MemoryItem(UUIDPrimaryKey, Base):
     __tablename__ = "memory_items"
 
-    scope: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    scope_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(36), nullable=False)
     key: Mapped[str] = mapped_column(String(256), nullable=False)
     value: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     content: Mapped[str] = mapped_column(Text, default="", nullable=False)

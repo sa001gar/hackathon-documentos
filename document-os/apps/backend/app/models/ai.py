@@ -33,8 +33,12 @@ class AILog(UUIDPrimaryKey, Base):
 
     __tablename__ = "ai_logs"
 
-    document_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
-    section_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    section_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("document_sections.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     agent: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     model: Mapped[str] = mapped_column(String(128), default="", nullable=False)
@@ -69,3 +73,7 @@ class GenerationJob(UUIDPrimaryKey, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_gen_jobs_doc_status", "document_id", "status"),
+    )

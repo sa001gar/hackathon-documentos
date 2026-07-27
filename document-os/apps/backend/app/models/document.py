@@ -15,7 +15,7 @@ class Document(UUIDPrimaryKey, TimestampMixin, Base):
         String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=False
     )
     template_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("templates.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("templates.id", ondelete="SET NULL"), index=True, nullable=True
     )
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -23,11 +23,12 @@ class Document(UUIDPrimaryKey, TimestampMixin, Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
     meta: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
     created_by: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
     )
 
     __table_args__ = (
         Index("ix_documents_project_updated", "project_id", "updated_at"),
+        Index("ix_documents_project_status", "project_id", "status"),
     )
 
     project: Mapped["Project"] = relationship(back_populates="documents")  # noqa: F821

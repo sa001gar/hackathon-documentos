@@ -23,11 +23,13 @@ class KGNode(UUIDPrimaryKey, Base):
     __tablename__ = "kg_nodes"
 
     label: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
-    node_type: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    node_type: Mapped[str] = mapped_column(String(64), nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    workspace_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True, nullable=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
     project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=True)
-    document_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     properties: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
@@ -35,7 +37,6 @@ class KGNode(UUIDPrimaryKey, Base):
 
     __table_args__ = (
         Index("ix_kg_nodes_type_source", "node_type", "source_id"),
-        Index("ix_kg_nodes_workspace_type", "workspace_id", "node_type"),
         Index("ix_kg_nodes_ws_type_date", "workspace_id", "node_type", "created_at"),
     )
 

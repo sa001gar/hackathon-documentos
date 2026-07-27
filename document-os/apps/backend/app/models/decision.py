@@ -27,7 +27,9 @@ class Decision(UUIDPrimaryKey, Base):
     impact: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     assumptions: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
-    document_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
+    document_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     project_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("projects.id", ondelete="SET NULL"), index=True, nullable=True)
     workspace_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), index=True, nullable=True)
     created_by: Mapped[str] = mapped_column(String(36), nullable=False)
